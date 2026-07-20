@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Open Ore Mapper</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="hero">
+    <div class="hero-text">
+      <h1>Open Ore Mapper</h1>
+      <p class="subtitle">
+        Map exposed surface mineral signatures from hyperspectral raster cubes
+        using Spectral Angle Mapper and NNLS abundance estimation.
+      </p>
+      <p class="limitation-note">
+        <strong>Important:</strong> This tool identifies <em>spectral similarity</em>
+        at or near the surface. A match means the input spectrum is consistent
+        with a reference mineral spectrum. It does <strong>not</strong> confirm
+        the presence of a buried ore body. Always validate with field sampling,
+        petrology, and geochemistry.
+      </p>
+    </div>
+    <div class="hero-aside">
+      <div class="status-card" id="connection-status" role="status" aria-live="polite">
+        Checking server connection...
+      </div>
+    </div>
+  </header>
+
+  <main class="app-layout">
+    <section class="panel inputs-panel" aria-label="Input controls">
+      <h2>Inputs</h2>
+
+      <div class="field">
+        <label for="file-input">Hyperspectral raster file (TIFF, H5, HDF5)</label>
+        <input type="file" id="file-input" accept=".tif,.tiff,.h5,.hdf5" aria-describedby="file-help">
+        <span id="file-help" class="helper-text">Upload a raster cube with at least 2 spectral bands.</span>
+      </div>
+
+      <div class="field">
+        <label for="sensor-input">Sensor preset</label>
+        <select id="sensor-input" aria-describedby="sensor-help">
+          <option value="cubert_ultris_s5">Cubert Ultris S5</option>
+          <option value="custom">Custom (specify wavelengths below)</option>
+        </select>
+        <span id="sensor-help" class="helper-text">Select a known sensor or choose Custom to enter wavelengths manually.</span>
+      </div>
+
+      <div class="field">
+        <label for="wavelengths-input">Custom wavelengths (JSON array, optional)</label>
+        <input type="text" id="wavelengths-input" placeholder='e.g. [450, 550, 650]' aria-describedby="wavelengths-help">
+        <span id="wavelengths-help" class="helper-text">Required when sensor is set to Custom. Leave empty to use sensor defaults.</span>
+      </div>
+
+      <div class="field">
+        <label for="excluded-bands-input">Excluded band indices (comma-separated, optional)</label>
+        <input type="text" id="excluded-bands-input" placeholder="e.g. 0, 5, 10" aria-describedby="excluded-help">
+        <span id="excluded-help" class="helper-text">Zero-based band indices to exclude from processing.</span>
+      </div>
+
+      <div class="field">
+        <label for="min-band-fraction-input">Minimum band valid fraction</label>
+        <input type="number" id="min-band-fraction-input" value="0.5" min="0" max="1" step="0.05" aria-describedby="fraction-help">
+        <span id="fraction-help" class="helper-text">Bands with fewer valid pixels than this fraction are excluded (0.0 - 1.0).</span>
+      </div>
+
+      <div class="button-group">
+        <button type="button" id="run-qc-btn" class="btn btn-secondary">Run QC</button>
+        <button type="button" id="run-predict-btn" class="btn btn-primary">Run mapping</button>
+      </div>
+
+      <div id="status-bar" class="status-bar" role="status" aria-live="polite"></div>
+    </section>
+
+    <section class="panel results-panel" aria-label="Results">
+      <h2>Results</h2>
+
+      <div id="results-empty" class="results-placeholder">
+        <p>Upload a file and run QC (<code>/v1/qc/raster</code>) or mapping (<code>/v1/predict</code>) to see results here.</p>
+      </div>
+
+      <div id="results-loading" class="results-placeholder hidden">
+        <p>Processing...</p>
+      </div>
+
+      <div id="results-error" class="results-placeholder error hidden" role="alert">
+        <p id="error-message"></p>
+      </div>
+
+      <div id="results-content" class="hidden">
+        <div id="qc-section" class="result-section hidden">
+          <h3>Quality Control</h3>
+          <dl class="result-grid">
+            <dt>Status</dt>
+            <dd id="qc-status"></dd>
+            <dt>Retained bands</dt>
+            <dd id="qc-retained-bands"></dd>
+            <dt>Excluded bands</dt>
+            <dd id="qc-excluded-bands"></dd>
+            <dt>Valid pixel fraction</dt>
+            <dd id="qc-valid-fraction"></dd>
+            <dt>Warnings</dt>
+            <dd id="qc-warnings"></dd>
+          </dl>
+        </div>
+
+        <div id="prediction-section" class="result-section hidden">
+          <h3>Prediction Results</h3>
+          <div id="prediction-statistics"></div>
+          <div id="prediction-layers" class="image-layers"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    <p>
+      Open Ore Mapper &mdash; outputs are measures of <strong>spectral similarity</strong>
+      and are not a confirmed ore discovery. Always verify with ground truth.
+    </p>
+  </footer>
+
+  <script src="/app.js"></script>
+</body>
+</html>
