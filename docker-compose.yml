@@ -1,0 +1,22 @@
+services:
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ghcr.io/${GITHUB_REPOSITORY:-open-ore-mapper}/backend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - STORAGE_DIR=/data/uploads
+      - RESULTS_DIR=/data/results
+      - SPECTRAL_LIB_PATH=/app/data/spectral_library.duckdb
+    volumes:
+      - upload_data:/data/uploads
+      - results_data:/data/results
+      - spectral_data:/app/data
+volumes:
+  upload_data:
+  results_data:
+  spectral_data:

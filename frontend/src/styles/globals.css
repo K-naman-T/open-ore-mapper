@@ -1,0 +1,220 @@
+@import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
+@import "maplibre-gl/dist/maplibre-gl.css";
+
+@theme {
+  /* Geist Dark gray scale (10-step semantic intent) */
+  --color-gray-100: #1a1a1a;
+  --color-gray-200: #1f1f1f;
+  --color-gray-300: #292929;
+  --color-gray-400: #2e2e2e;
+  --color-gray-500: #454545;
+  --color-gray-600: #878787;
+  --color-gray-700: #8f8f8f;
+  --color-gray-800: #7d7d7d;
+  --color-gray-900: #a0a0a0;
+  --color-gray-1000: #ededed;
+
+  /* Background surfaces */
+  --color-bg-0: #000000;
+  --color-bg-1: var(--color-gray-100);
+  --color-bg-2: var(--color-gray-200);
+  --color-bg-3: var(--color-gray-300);
+  --color-bg-4: var(--color-gray-400);
+
+  /* Border hierarchy */
+  --color-border-subtle: var(--color-gray-400);
+  --color-border-default: var(--color-gray-400);
+  --color-border-strong: var(--color-gray-500);
+
+  /* Text hierarchy (solid, not alpha) */
+  --color-text-primary: var(--color-gray-1000);
+  --color-text-secondary: var(--color-gray-900);
+  --color-text-tertiary: var(--color-gray-700);
+  --color-text-disabled: var(--color-gray-600);
+
+  /* Mineral-themed accent palette */
+  --color-accent: #006efe;
+  --color-accent-soft: #006efe22;
+  --color-accent-hover: #47a8ff;
+  --color-accent-text: #47a8ff;
+  --color-green: #00ac3a;
+  --color-green-soft: #00ac3a18;
+  --color-amber: #ffae00;
+  --color-amber-soft: #ffae0018;
+  --color-red: #f13242;
+  --color-red-soft: #f1324218;
+
+  /* Geist type: sans for UI, mono for data */
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "SF Mono", "Fira Code", "Fira Mono", monospace;
+
+  /* Heading token */
+  --text-heading-32: 32px;
+  --text-heading-24: 24px;
+  --text-heading-20: 20px;
+  --text-heading-18: 18px;
+  --text-heading-14: 14px;
+
+  /* Animate tokens */
+  --animate-shimmer: shimmer 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  --animate-toast-in: toast-in 500ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  --animate-tooltip-in: tooltip-in 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-progress-shimmer: progress-shimmer 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--color-bg-0);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background: var(--color-accent-soft);
+}
+
+:focus-visible {
+  box-shadow: 0 0 0 2px var(--color-bg-0), 0 0 0 4px var(--color-accent-hover);
+  outline: none;
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--color-gray-500); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-gray-600); }
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+@keyframes toast-in {
+  0% { transform: translateX(100%) scale(0.9); opacity: 0; }
+  100% { transform: translateX(0) scale(1); opacity: 1; }
+}
+@keyframes toast-out {
+  0% { transform: translateX(0) scale(1); opacity: 1; }
+  100% { transform: translateX(100%) scale(0.9); opacity: 0; }
+}
+@keyframes tooltip-in {
+  0% { opacity: 0; transform: translateY(4px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+@keyframes progress-shimmer {
+  0% { mask-position: -100% 0; }
+  100% { mask-position: 200% 0; }
+}
+@keyframes fade-in {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+.leaflet-container {
+  background: var(--color-bg-0) !important;
+  font-family: var(--font-sans) !important;
+}
+.leaflet-control-zoom a {
+  background: var(--color-bg-1) !important;
+  color: var(--color-text-primary) !important;
+  border-color: var(--color-border-subtle) !important;
+}
+.leaflet-control-zoom a:hover {
+  background: var(--color-bg-2) !important;
+}
+.leaflet-control-attribution {
+  background: var(--color-bg-1) !important;
+  color: var(--color-text-tertiary) !important;
+  font-size: 10px !important;
+}
+
+/* MapLibre dark nav controls */
+.maplibregl-ctrl-group {
+  background: var(--color-bg-1) !important;
+  border: 1px solid var(--color-border-default) !important;
+  border-radius: 8px !important;
+  overflow: hidden !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4) !important;
+}
+.maplibregl-ctrl-group button {
+  width: 32px !important;
+  height: 32px !important;
+  background: var(--color-bg-1) !important;
+  border: none !important;
+  border-bottom: 1px solid var(--color-border-subtle) !important;
+}
+.maplibregl-ctrl-group button:last-child {
+  border-bottom: none !important;
+}
+.maplibregl-ctrl-group button:hover {
+  background: var(--color-bg-2) !important;
+}
+.maplibregl-ctrl-group button span {
+  filter: invert(0.85) !important;
+}
+.maplibregl-ctrl-attrib {
+  background: var(--color-bg-1) !important;
+  color: var(--color-text-tertiary) !important;
+  font-size: 10px !important;
+  padding: 2px 8px !important;
+  border-radius: 4px !important;
+  opacity: 0.6 !important;
+}
+.maplibregl-ctrl-attrib a {
+  color: var(--color-text-secondary) !important;
+}
+
+.maplibregl-ctrl-top-right,
+.maplibregl-ctrl-bottom-right {
+  z-index: 10 !important;
+}
+
+.maplibregl-ctrl-group {
+  background: var(--color-bg-1) !important;
+  border: 1px solid var(--color-border-default) !important;
+  border-radius: 10px !important;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4) !important;
+}
+
+.maplibregl-ctrl-group button {
+  width: 36px !important;
+  height: 36px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: transparent !important;
+  border: none !important;
+  border-bottom: 1px solid var(--color-border-subtle) !important;
+}
+
+.maplibregl-ctrl-group button:last-child {
+  border-bottom: none !important;
+}
+
+.maplibregl-ctrl-group button:hover {
+  background: var(--color-bg-2) !important;
+}
+
+.maplibregl-ctrl-group button span {
+  filter: invert(0.85);
+}
+
+.maplibregl-ctrl-attrib {
+  background: var(--color-bg-1) !important;
+  color: var(--color-text-tertiary) !important;
+  font-size: 10px !important;
+}
+
+.maplibregl-ctrl-attrib a {
+  color: var(--color-text-tertiary) !important;
+}
+
+.maplibregl-canvas {
+  outline: none;
+}

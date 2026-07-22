@@ -40,6 +40,9 @@ def resolve_wavelengths(
     if sensor_name == "cubert_ultris_s5":
         wavelengths = np.linspace(450.0, 850.0, 51).tolist()
         return validate_wavelengths(wavelengths, expected_bands), sensor_name
+    if sensor_name == "emit":
+        wavelengths = np.linspace(381.0, 2493.0, 285).tolist()
+        return validate_wavelengths(wavelengths, expected_bands), sensor_name
     raise ValueError(
         "Provide wavelengths as a JSON array, or choose a sensor preset that matches the raster band count"
     )

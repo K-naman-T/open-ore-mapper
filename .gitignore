@@ -1,26 +1,81 @@
+# Python – bytecode, builds, package metadata
 __pycache__/
 *.py[cod]
-.pytest_cache/
-.ruff_cache/
-.mypy_cache/
-.venv/
-venv/
+*.pyo
 dist/
 build/
 *.egg-info/
+
+# Virtual environments
+.venv/
+venv/
+
+# Tool caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Coverage
+.coverage*
+coverage/
+htmlcov/
+
+# Environment & secrets
 .env
 .env.*
-outputs/
-*.tif
-*.tiff
-*.h5
-*.hdf5
-*.npy
-*.npz
-*.pth
-*.pt
-*.pkl
-*.keras
+.netrc
+*.netrc
+
+# Node / frontend
 node_modules/
 .next/
+frontend/dist/
+frontend/test-results/
+frontend/playwright-report/
+frontend/tsconfig.tsbuildinfo
+
+# Scientific data formats – large downloads or generated
 data/
+outputs/
+*.h5
+*.hdf5
+*.nc
+*.npy
+*.npz
+*.pkl
+*.pt
+*.pth
+*.keras
+*.mat
+
+# TIFF – block large scene data but allow small project-included examples
+*.tif
+*.tiff
+!examples/*.tif
+!frontend/e2e/fixtures/*.tif
+
+# Allow source fixture databases (but not runtime *.db)
+!examples/*.db
+!tests/*.db
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
+
+# IDE / editor
+*.swp
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+.directory
+
+# Internal planning/audit docs – stale local-only files, not for publication
+AUDIT.md
+PLAN.md
+TECH_PLAN.md
+RESEARCH_SYNTHESIS.md
+END_TO_END_TEST_PLAN.md
+AIRBORNE_AND_FIELD_DATA_SOURCES.md

@@ -69,6 +69,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Override download URL (for testing with local files)",
     )
     download.set_defaults(func=_run_download_scene)
+
+    fetch = subparsers.add_parser("fetch-library", help="Download reference mineral spectra from RELAB")
+    fetch.add_argument("--minerals", help="Comma-separated list of mineral names to fetch", default=None)
+    fetch.add_argument("--class", dest="mineral_class", help="Mineral class filter", default=None)
+    fetch.add_argument("--output", help="Output directory", default=None)
+    fetch.set_defaults(func=_run_fetch_library)
     return parser
 
 
@@ -105,10 +111,11 @@ def _run_predict(args: argparse.Namespace) -> int:
     response = mapper.to_response(result)
 
     (output_dir / "result.json").write_text(json.dumps(response, indent=2), encoding="utf-8")
-    (output_dir / "quality_report.json").write_text(
-        json.dumps(mapper.to_quality_response(result.quality_report), indent=2),
-        encoding="utf-8",
-    )
+    if result.quality_report is not None:
+        (output_dir / "quality_report.json").write_text(
+            json.dumps(mapper.to_quality_response(result.quality_report), indent=2),
+            encoding="utf-8",
+        )
     _write_png(output_dir / "class_map.png", result.output_image)
     _write_png(output_dir / "confidence.png", result.confidence_image)
     _write_png(output_dir / "top_abundance.png", result.top_abundance_image)
@@ -157,6 +164,46 @@ def _run_download_scene(args: argparse.Namespace) -> int:
     )
     print(f"Downloaded {args.scene_id} to {dest}")
     return 0
+
+
+def _run_fetch_library(args: argparse.Namespace) -> int:
+    from .relab_fetcher import build_spectral_library, fetch_relab_entries, CACHE_DIR
+
+    minerals: list[str] | None = None
+    if args.minerals:
+        minerals = [name.strip() for name in args.minerals.split(",") if name.strip()]
+
+    output_dir = Path(args.output) if args.output else CACHE_DIR
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    if minerals:
+        print(f"Fetching RELAB spectra for: {', '.join(minerals)}")
+        library = build_spectral_library(target_minerals=minerals)
+        print(f"Found {len(library.names)} spectra for {', '.join(minerals)}")
+        print(f"Wavelength range: {float(library.wavelengths[0]):.1f} – {float(library.wavelengths[-1]):.1f} nm")
+        print(f"Spectra shape: {library.spectra.shape}")
+        index_path = output_dir / "index.json"
+        if index_path.exists():
+            index_text = index_path.read_text(encoding="utf-8")
+        else:
+            from .relab_fetcher import RelabIndex
+            index = RelabIndex([])
+            index_text = index.to_json()
+            index_path.write_text(index_text, encoding="utf-8")
+        print(f"Index written to {index_path}")
+    else:
+        entries = fetch_relab_entries()
+        print(f"Indexed {len(entries)} RELAB spectra")
+        mineral_classes: dict[str, int] = {}
+        for e in entries:
+            mineral_classes[e.mineral_class] = mineral_classes.get(e.mineral_class, 0) + 1
+        for cls_name, count in sorted(mineral_classes.items()):
+            print(f"  {cls_name}: {count}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
 
 
 def _write_png(path: Path, data_url: str) -> None:

@@ -18,4 +18,4 @@ This repository is a clean open-source project for surface mineral signature map
 
 ## First Release Policy
 
-The first public release ships with synthetic demo spectra only. Real spectral libraries may be documented as user-provided inputs or optional download recipes after their licenses are reviewed.
+The first public release ships with synthetic demo spectra only. Real spectral libraries may be documented as user-provided inputs or optional download recipes after their licenses are reviewed. RELAB spectra are publicly downloadable via NASA PDS but redistribution terms are not yet verified — do not bundle; use as fetch-at-runtime input only.

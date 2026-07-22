@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import io
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any, cast
 
@@ -16,6 +16,7 @@ from .sam import angles_to_strength, compute_sam_angles
 from .schemas import MapperOptions, MapperResult
 from .spectral_library import SpectralLibrary, load_csv_library, load_demo_library, resample_library
 from .tiling import iter_tiles
+from .sff import sff_classify_cube
 from .unmixing import estimate_nnls_abundances
 from .wavelengths import resolve_wavelengths, validate_wavelengths
 
@@ -63,14 +64,24 @@ class OreMapper:
             selected_options, cube.shape[2], embedded_wavelengths
         )
 
-        excluded_band_indices = selected_options.excluded_band_indices
-        if not excluded_band_indices and auto_excluded:
-            excluded_band_indices = auto_excluded
+        if not selected_options.excluded_band_indices and auto_excluded:
+            selected_options = replace(selected_options, excluded_band_indices=auto_excluded)
+
+        return self.predict_cube(cube, wavelengths, selected_options, sensor)
+
+    def predict_cube(
+        self,
+        cube: NDArray[np.floating[Any]],
+        wavelengths: list[float],
+        options: MapperOptions | None = None,
+        sensor: str = "manual",
+    ) -> MapperResult:
+        selected_options = options or MapperOptions()
 
         report = analyze_raster_quality(
             cube,
             wavelengths,
-            excluded_band_indices=excluded_band_indices,
+            excluded_band_indices=selected_options.excluded_band_indices or None,
             min_band_valid_fraction=selected_options.min_band_valid_fraction,
         )
         if len(report.retained_band_indices) < 2:
@@ -78,67 +89,19 @@ class OreMapper:
                 "At least two usable spectral bands are required after QC"
             )
 
-        cube, wavelengths = select_bands(cube, wavelengths, report.retained_band_indices)
-        library = self._load_library(selected_options, wavelengths)
-
-        valid_mask = valid_pixel_mask(cube)
-        normalized_cube = normalize_cube(cube, selected_options.normalization)
-        ref_spectra = normalize_cube(library.spectra[np.newaxis, :, :], selected_options.normalization)[0]
-        abundance_cube_input = normalize_cube(cube, "none")
-        abundance_refs = normalize_cube(library.spectra[np.newaxis, :, :], "none")[0]
-
-        height, width, _bands = normalized_cube.shape
-        mineral_count = len(library.names)
-        class_map = np.full((height, width), UNKNOWN_CLASS, dtype=np.uint8)
-        confidence_map = np.zeros((height, width), dtype=np.float32)
-        abundance_cube = np.zeros((height, width, mineral_count), dtype=np.float32)
-
-        for row0, row1, col0, col1 in iter_tiles(height, width, selected_options.tile_size):
-            tile = normalized_cube[row0:row1, col0:col1, :]
-            abundance_tile = abundance_cube_input[row0:row1, col0:col1, :]
-            tile_valid = valid_mask[row0:row1, col0:col1]
-            flat = tile.reshape(-1, tile.shape[2])
-            abundance_flat = abundance_tile.reshape(-1, abundance_tile.shape[2])
-            flat_valid = tile_valid.reshape(-1)
-            if not np.any(flat_valid):
-                continue
-
-            valid_pixels = flat[flat_valid]
-            abundance_pixels = abundance_flat[flat_valid]
-            angles = compute_sam_angles(valid_pixels, ref_spectra)
-            strength = angles_to_strength(angles)
-            abundances = estimate_nnls_abundances(abundance_pixels, abundance_refs)
-            combined = 0.6 * strength + 0.4 * abundances
-            best_idx = np.argmax(combined, axis=1).astype(np.uint8)
-            best_conf = np.max(combined, axis=1).astype(np.float32)
-            best_angle = np.min(angles, axis=1).astype(np.float32)
-            accepted = (best_conf >= selected_options.min_confidence) & (
-                best_angle <= selected_options.sam_threshold_deg
-            )
-
-            tile_classes = np.full(flat_valid.shape, UNKNOWN_CLASS, dtype=np.uint8)
-            tile_conf = np.zeros(flat_valid.shape, dtype=np.float32)
-            tile_abund = np.zeros((flat_valid.shape[0], mineral_count), dtype=np.float32)
-            valid_positions = np.where(flat_valid)[0]
-            tile_classes[valid_positions[accepted]] = best_idx[accepted]
-            tile_conf[valid_positions] = best_conf
-            tile_abund[valid_positions] = abundances
-
-            class_map[row0:row1, col0:col1] = tile_classes.reshape(row1 - row0, col1 - col0)
-            confidence_map[row0:row1, col0:col1] = tile_conf.reshape(row1 - row0, col1 - col0)
-            abundance_cube[row0:row1, col0:col1, :] = tile_abund.reshape(
-                row1 - row0,
-                col1 - col0,
-                mineral_count,
-            )
+        cube, retained_wls = select_bands(cube, wavelengths, report.retained_band_indices)
+        library = self._load_library(selected_options, retained_wls)
+        class_map, confidence_map, abundance_cube = self._classify_core(
+            cube, retained_wls, library, selected_options
+        )
 
         top_abundance = np.max(abundance_cube, axis=2)
-        all_warnings = self._coverage_warnings(wavelengths) + report.warnings
+        all_warnings = self._coverage_warnings(retained_wls) + report.warnings
         return MapperResult(
             status="success",
-            model_used="library_sam_nnls_v1",
+            model_used=f"library_{selected_options.classifier}_nnls_v1",
             sensor=sensor,
-            wavelengths=wavelengths,
+            wavelengths=retained_wls,
             minerals=library.names,
             output_image=class_map_png_data_url(class_map, library.names),
             confidence_image=confidence_png_data_url(confidence_map),
@@ -148,6 +111,75 @@ class OreMapper:
             downloads={},
             quality_report=report,
         )
+
+    def _classify_core(
+        self,
+        cube: NDArray[np.floating[Any]],
+        wavelengths: list[float],
+        library: SpectralLibrary,
+        options: MapperOptions,
+    ) -> tuple[NDArray[np.uint8], NDArray[np.float32], NDArray[np.float32]]:
+        valid_mask = valid_pixel_mask(cube)
+        normalized_cube = normalize_cube(cube, options.normalization)
+        ref_spectra = normalize_cube(library.spectra[np.newaxis, :, :], options.normalization)[0]
+        abundance_cube_input = normalize_cube(cube, "none")
+        abundance_refs = normalize_cube(library.spectra[np.newaxis, :, :], "none")[0]
+
+        use_sff = options.classifier == "sff"
+
+        wavelengths_np = np.array(wavelengths, dtype=np.float32)
+        height, width, _bands = normalized_cube.shape
+        mineral_count = len(library.names)
+        class_map = np.full((height, width), UNKNOWN_CLASS, dtype=np.uint8)
+        confidence_map = np.zeros((height, width), dtype=np.float32)
+        abundance_cube = np.zeros((height, width, mineral_count), dtype=np.float32)
+
+        if use_sff:
+            class_map, confidence_map = sff_classify_cube(
+                normalized_cube, wavelengths_np, mineral_names=library.names
+            )
+
+        if not use_sff:
+            for row0, row1, col0, col1 in iter_tiles(height, width, options.tile_size):
+                tile = normalized_cube[row0:row1, col0:col1, :]
+                abundance_tile = abundance_cube_input[row0:row1, col0:col1, :]
+                tile_valid = valid_mask[row0:row1, col0:col1]
+                flat = tile.reshape(-1, tile.shape[2])
+                abundance_flat = abundance_tile.reshape(-1, abundance_tile.shape[2])
+                flat_valid = tile_valid.reshape(-1)
+                if not np.any(flat_valid):
+                    continue
+
+                valid_pixels = flat[flat_valid]
+                abundance_pixels = abundance_flat[flat_valid]
+                angles = compute_sam_angles(valid_pixels, ref_spectra)
+                strength = angles_to_strength(angles)
+                abundances = estimate_nnls_abundances(abundance_pixels, abundance_refs)
+                combined = 0.6 * strength + 0.4 * abundances
+                best_idx = np.argmax(combined, axis=1).astype(np.uint8)
+                best_conf = np.max(combined, axis=1).astype(np.float32)
+                best_angle = np.min(angles, axis=1).astype(np.float32)
+                accepted = (best_conf >= options.min_confidence) & (
+                    best_angle <= options.sam_threshold_deg
+                )
+
+                tile_classes = np.full(flat_valid.shape, UNKNOWN_CLASS, dtype=np.uint8)
+                tile_conf = np.zeros(flat_valid.shape, dtype=np.float32)
+                tile_abund = np.zeros((flat_valid.shape[0], mineral_count), dtype=np.float32)
+                valid_positions = np.where(flat_valid)[0]
+                tile_classes[valid_positions[accepted]] = best_idx[accepted]
+                tile_conf[valid_positions] = best_conf
+                tile_abund[valid_positions] = abundances
+
+                class_map[row0:row1, col0:col1] = tile_classes.reshape(row1 - row0, col1 - col0)
+                confidence_map[row0:row1, col0:col1] = tile_conf.reshape(row1 - row0, col1 - col0)
+                abundance_cube[row0:row1, col0:col1, :] = tile_abund.reshape(
+                    row1 - row0,
+                    col1 - col0,
+                    mineral_count,
+                )
+
+        return class_map, confidence_map, abundance_cube
 
     def to_response(self, result: MapperResult) -> dict[str, Any]:
         response = asdict(result)
@@ -262,11 +294,31 @@ class OreMapper:
         return resolve_wavelengths(None, options.sensor, expected_bands)
 
     def _load_library(self, options: MapperOptions, wavelengths: list[float]) -> SpectralLibrary:
-        if options.spectral_library is None:
-            library = load_demo_library(options.minerals)
-        else:
+        if options.spectral_library is not None:
             library = load_csv_library(options.spectral_library, options.minerals)
-        return resample_library(library, wavelengths)
+            return resample_library(library, wavelengths)
+
+        if any(m.endswith("_demo") for m in options.minerals):
+            library = load_demo_library(options.minerals)
+            return resample_library(library, wavelengths)
+
+        try:
+            from .relab_fetcher import build_spectral_library as build_relab
+
+            target_wl = np.asarray(wavelengths, dtype=np.float32)
+            library = build_relab(options.minerals, target_wl)
+            if library.spectra.shape[0] > 0:
+                return library
+        except Exception:
+            pass
+
+        raise ValueError(
+            "Authoritative spectra are unavailable. "
+            "Your mineral names do not include '_demo' suffixes, so synthetic demo spectra "
+            "cannot be used in their place. "
+            "Provide a user CSV via --library or fetch an authoritative RELAB corpus "
+            "via `open-ore-mapper fetch-library`."
+        )
 
     def quality_file(
         self, path: str | Path, options: MapperOptions | None = None

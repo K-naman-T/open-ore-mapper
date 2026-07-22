@@ -1,205 +1,126 @@
 # Open Ore Mapper
 
-Open Ore Mapper is a local-first tool for mapping exposed surface mineral signatures from hyperspectral raster cubes using public spectral matching methods.
+**Work-in-progress.** Local-first tool for producing candidate surface mineral signature maps from hyperspectral raster cubes, using public spectral matching methods.
 
-It is not a buried ore-body detector. It identifies spectral evidence at or near the surface when the input bands cover diagnostic wavelengths.
+This tool identifies spectral *candidates* that warrant field validation. It does **not** detect buried ore bodies, confirm mineral presence, or replace petrology/geochemistry.
 
-## What It Does
+---
 
-- Spectral Angle Mapper classification
-- NNLS abundance-like strength layers
-- Tiled raster processing
-- User-provided spectral library CSV support
-- CLI output as PNG previews and JSON statistics
-- Optional FastAPI service
+## Working Today
 
-## Install
+| Capability | Status |
+|---|---|
+| CLI (`predict`, `qc-raster`, `list-scenes`, `download-scene`, `fetch-library`) | Stable |
+| FastAPI service (upload, predict, QC, tileserver) | Stable |
+| SAM + NNLS classification pipeline | Default path |
+| Raster quality control (band-level, pixel-level) | Stable |
+| User-provided spectral library CSV | Stable |
+| Public scene catalog (Cuprite, Salinas-A, Indian Pines) | Stable |
+| Synthetic demo spectra (6 minerals) | Bundled for testing |
+| React/TypeScript frontend (map tiles, upload UI) | In development |
+| Docker Compose (backend only) | Development use |
+
+## Experimental / Not Yet Wired
+
+| Feature | Module exists? | Wired in pipeline? | Notes |
+|---|---|---|---|
+| SFF classifier (`classifier="sff"`) | `sff.py` + `continuum_removal.py` | Conditional | Pixel-level loop, slow on large cubes |
+| Default `classifier="continuum_removal"` | `continuum_removal.py` | **Not gated** | Schema default is misleading — `_classify_core` ignores it; SAM+NNLS runs regardless |
+| ACE sub-pixel detection (`use_ace=True`) | `ace.py` | No | Schema field defined; never invoked |
+| MTMF (`use_mtmf=True`) | `mtmf.py` | No | Not invoked; `use_mtmf` defaults to `False` and is inert |
+| SUnSAL sparse unmixing (`unmixing:`) | `sunsal.py` | No | `should_use_sunsal()` never checked |
+| Vegetation masking (`vegetation_mask=True`) | `vegetation.py` | No | Schema field defined; never applied |
+| Topographic correction | Planned | No | Schema fields defined (`topographic_correct`, `dem_type` etc.) |
+| RELAB PDS fetcher (`relab_fetcher.py`) | Yes — index + download + resample | No — CLI `fetch-library` exists but PDS directory layout changed | Inventory discovery broken; PDS4-corpus workflow tracked in SPECTRAL_LIBRARIES_RESEARCH.md |
+
+**Bottom line:** SAM + NNLS works end-to-end and is the only pipeline that affects final output. All other classifier/feature options at `MapperOptions` are partially implemented placeholders.
+
+## Architecture
+
+```
+CLI / API → load_cube (.tif/.h5/.mat)
+          → QC (band filter, valid pixels)
+          → load/resample spectral library
+          → normalize (l2 / percentile / none)
+          → tile loop: SAM angles + NNLS abundances → fuse (0.6×SAM + 0.4×NNLS)
+          → threshold → render PNG + JSON statistics
+```
+
+Backend: Python 3.10+, FastAPI, NumPy/SciPy, tifffile, h5py.
+Frontend: React 19, TypeScript, Vite, Tailwind 4, MapLibre GL.
+
+## Quickstart
+
+### Backend
 
 ```bash
-python -m pip install -e '.[dev,api]'
+pip install -e '.[dev,api]'
+open-ore-mapper predict examples/demo_scene.tif --sensor cubert_ultris_s5 --minerals hematite_demo --output-dir outputs/demo
 ```
 
-## CLI Quickstart
+API:
 
 ```bash
-open-ore-mapper predict scene.tif \
-  --sensor cubert_ultris_s5 \
-  --minerals hematite_demo,goethite_demo \
-  --output-dir outputs/scene-001
+uvicorn open_ore_mapper.api:app --host 127.0.0.1 --port 8000
+# Open http://127.0.0.1:8000/
 ```
 
-Outputs:
-
-- `result.json`
-- `class_map.png`
-- `confidence.png`
-- `top_abundance.png`
-
-Use manual wavelengths with a JSON array:
+### Frontend
 
 ```bash
-open-ore-mapper predict scene.tif \
-  --wavelengths examples/manual_wavelengths.json \
-  --library examples/demo_library.csv \
-  --minerals hematite_demo,goethite_demo \
-  --output-dir outputs/manual-run
+cd frontend && npm install && npm run dev
+# Open http://localhost:5173/ (proxies API to :8000 per vite.config.ts)
 ```
 
-## Python API
-
-```python
-from open_ore_mapper import MapperOptions, OreMapper
-
-mapper = OreMapper()
-result = mapper.predict_file(
-    "scene.tif",
-    MapperOptions(
-        sensor="cubert_ultris_s5",
-        minerals=["hematite_demo", "goethite_demo"],
-    ),
-)
-print(result.statistics)
-```
-
-## API Quickstart
-
-Launch the local web app:
+### Docker (backend only)
 
 ```bash
-uvicorn open_ore_mapper.api:app --host 127.0.0.1 --port 8001
+make dev   # docker compose up --build -d  (starts backend on port 8000)
+make build # docker compose build
 ```
 
-Then open [http://127.0.0.1:8001/](http://127.0.0.1:8001/) in your browser. The app provides a UI for uploading rasters, running QC, and running predictions, using the same API endpoints as the CLI.
-
-Endpoints:
-
-- `GET /health`
-- `GET /v1/minerals`
-- `POST /v1/predict` with multipart field `file` and optional form field `options` as JSON.
-- `POST /v1/qc/raster` with multipart field `file` and optional form field `options` as JSON.
-
-Example `options` JSON:
-
-```json
-{"minerals":["hematite_demo","goethite_demo"],"min_confidence":0.0,"sam_threshold_deg":180.0}
-```
-
-## Raster Quality Control
-
-Open Ore Mapper performs quality control on every input raster before mineral mapping:
-
-1. **Band-level QC:** Each band is checked for its fraction of finite (non-NaN, non-inf) pixels. Bands below `min_band_valid_fraction` (default 0.5) are excluded.
-2. **User exclusions:** Bands can be explicitly excluded via `excluded_band_indices`.
-3. **Valid pixel fraction:** After QC, the fraction of pixels that are finite and non-zero across all retained bands is reported.
-4. **Status:** `pass` (all clear), `warn` (bands excluded or partial valid pixels), or `fail` (fewer than 2 usable bands).
-
-### `.mat` (MATLAB) Scene Support
-
-Open Ore Mapper can load hyperspectral cubes from `.mat` files using `scipy.io.loadmat`.
-The loader selects the first non-private 3D floating-point array, or recognizes common keys
-(`cube`, `data`, `hsi`, `image`, `scene`, `SalinasA_corrected`, `indian_pines_corrected`).
-
-## Public Hyperspectral Scenes
-
-Open Ore Mapper includes a catalog of real public airborne/satellite hyperspectral scenes
-for testing and demonstration. These are provided by the Grupo de Inteligencia Computacional
-at the Universidad del País Vasco (EHU).
-
-### Caveats
-
-- **Salinas-A** and **Indian Pines** are real airborne AVIRIS hyperspectral scenes but are
-  **agricultural/vegetation/land-cover scenes**, not mineral ore scenes. They are useful for
-  testing the software pipeline (loading, QC, SAM classification) with real sensor data.
-- **Cuprite AVIRIS** is a mineral-relevant AVIRIS reflectance scene over Cuprite, NV, a
-  well-known hydrothermal alteration mineral site. This is the best choice for mineral mapping
-  demonstrations. The file is large (~100 MB) and network-dependent.
-- **Demo mineral library** values bundled with this repository are synthetic. For real
-  mineral mapping, you must supply a user spectral library CSV using `--library`.
-
-### List available scenes
+### Tests
 
 ```bash
-open-ore-mapper list-scenes
+make test              # pytest -v
+make lint              # ruff check (separate: make typecheck for mypy)
+cd frontend && npm run test:e2e   # Playwright E2E (UI-state only; no backend end-to-end processing)
 ```
 
-### Download a scene
+## Supported File Types
 
-```bash
-open-ore-mapper download-scene salinas_a_corrected --output-dir data/public
-```
+| Format | Details |
+|---|---|
+| `.tif` / `.tiff` | GeoTIFF, any band layout (auto-detected HWC) |
+| `.h5` / `.hdf5` / `.nc` | HDF5/NetCDF; reads embedded `/wavelengths` and `sensor_band_parameters/good_wavelengths` |
+| `.mat` | MATLAB v5+; picks first 3D floating array or known keys (`cube`, `data`, `hsi`, `SalinasA_corrected`, etc.) |
 
-Then run quality control or prediction with approximate AVIRIS wavelengths:
+## EMIT Bounding-Box Pipeline (Experimental)
 
-```bash
-open-ore-mapper qc-raster data/public/SalinasA_corrected.mat \
-  --wavelengths examples/aviris_204_wavelengths.json
+`POST /v1/predict/bbox` accepts a WGS84 bbox, searches NASA Earthdata for EMIT L2A Reflectance granules, downloads + orthorectifies + classifies the best candidate.
 
-open-ore-mapper predict data/public/SalinasA_corrected.mat \
-  --wavelengths examples/aviris_204_wavelengths.json \
-  --library examples/demo_library.csv \
-  --minerals hematite_demo,goethite_demo \
-  --output-dir outputs/salinas-a
-```
+**Known limitations:**
 
-For the Cuprite scene:
+| Limitation | Detail |
+|---|---|
+| In-process execution | Background task in the uvicorn process via FastAPI/Starlette BackgroundTasks; no separate worker queue. Synchronous callables are offloaded to a thread pool so they do not directly block the event loop, but remain tied to the API process lifetime and consume process/thread/memory resources. |
+| First-tile QC only | QC analyzes the first orthorectified tile, not the full scene. |
+| Full-area processing | Orthorectification processes all tiles individually; memory use scales with scene size. |
+| Georeferencing | `processed_bounds` reports pixel extent, not WGS84. Exact georeferencing from GLT metadata is not yet exposed. |
+| Authentication | Requires Earthdata credentials via `EARTHDATA_USERNAME`/`EARTHDATA_PASSWORD` env vars. |
+| Dependencies | Requires `[emit]` extras: `pip install -e '.[emit]'` (xarray, netcdf4, earthaccess). The Docker image includes `[api,emit]` so the bbox endpoint is available. |
 
-```bash
-open-ore-mapper download-scene cuprite_aviris --output-dir data/public
-open-ore-mapper predict data/public/Cuprite_f970619t01p02_r02_sc03.a.rfl.mat \
-  --wavelengths examples/aviris_wavelengths.json \
-  --library examples/demo_library.csv \
-  --minerals hematite_demo,goethite_demo \
-  --output-dir outputs/cuprite
-```
+## Spectral Library Reality
 
-### CLI: `qc-raster`
+**Bundled demo library** (`examples/demo_library.csv`): synthetic analytic curves for software testing only. **Not safe for scientific use.**
 
-```bash
-open-ore-mapper qc-raster scene.tif --sensor cubert_ultris_s5
-```
+**RELAB PDS fetcher** (`open-ore-mapper fetch-library`): experimental inventory-discovery script. The PDS directory layout changed post-publication and the hardcoded URL traversal is likely broken. Not wired into any pipeline path. Cached locally at `~/.cache/open-ore-mapper/relab/`.
 
-Options:
+**Authoritative corpus underway:** SPECTRAL_LIBRARIES_RESEARCH.md documents a verified PDS4-spectra bundling workflow. No authoritative library is yet bundled in-tree.
 
-- `--sensor`, `--wavelengths`: Wavelength source (same as `predict`).
-- `--exclude-bands`: Comma-separated zero-based band indices, e.g. `0,3,10`.
-- `--min-band-valid-fraction`: Minimum valid pixel fraction per band (default 0.5).
-- `--output`: Write JSON to a file instead of stdout.
+Always provide a user spectral library via `--library` when doing real work.
 
-### Prediction QC Options
-
-The `predict` command also accepts `--exclude-bands` and `--min-band-valid-fraction`:
-
-```bash
-open-ore-mapper predict scene.tif \
-  --sensor cubert_ultris_s5 \
-  --minerals hematite_demo,goethite_demo \
-  --exclude-bands 0,10 \
-  --output-dir outputs/scene-001
-```
-
-A `quality_report.json` is written alongside the existing outputs.
-
-### API: `POST /v1/qc/raster`
-
-Accepts multipart `file` and optional `options` JSON form field (same format as `/v1/predict`). Returns the quality report as JSON.
-
-```bash
-curl -X POST http://127.0.0.1:8001/v1/qc/raster \
-  -F "file=@scene.tif" \
-  -F 'options={"sensor":"cubert_ultris_s5"}'
-```
-
-### HDF5 `/wavelengths`
-
-When loading `.h5` or `.hdf5` files, the mapper automatically reads embedded wavelengths from the `/wavelengths` dataset if present. This dataset is also used to orient the cube (band axis detection).
-
-## Spectral Similarity
-
-Open Ore Mapper identifies spectral similarity at or near the surface. A match indicates that the input spectrum is consistent with a reference mineral spectrum. It does **not** confirm the presence of a buried ore body. Always validate with field sampling, petrology, and geochemistry.
-
-## Spectral Library CSV Format
-
-User-provided libraries use long-form CSV:
+### Spectral Library CSV Format
 
 ```csv
 name,wavelength,reflectance
@@ -209,21 +130,47 @@ goethite_demo,450,0.38
 goethite_demo,550,0.44
 ```
 
-Rules:
+Required columns: `name`, `wavelength`, `reflectance`. Wavelengths must be strictly increasing per mineral. Selected minerals must share the same wavelength grid. All reflectance values must be finite.
 
-- Required columns: `name`, `wavelength`, `reflectance`.
-- Wavelengths must be strictly increasing for each mineral.
-- Selected minerals must share the same wavelength grid.
-- Reflectance values must be finite numbers.
+## CLI Commands
 
-## Demo Spectra
+| Command | Purpose |
+|---|---|
+| `open-ore-mapper predict <input>` | Run SAM+NNLS classification |
+| `open-ore-mapper qc-raster <input>` | Raster quality control report |
+| `open-ore-mapper list-scenes` | List downloadable public HSI scenes |
+| `open-ore-mapper download-scene <id>` | Download a public scene (.mat) |
+| `open-ore-mapper fetch-library` | Fetch RELAB spectral library index/spectra |
 
-The bundled `examples/demo_library.csv` values are synthetic demos for software testing. They are not authoritative mineral spectra and should not be used as field evidence without replacing them with reviewed, fit-for-purpose spectral libraries.
+## API Endpoints
 
-## IP Boundary
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/health` | Liveness check |
+| GET | `/v1/minerals` | List available demo minerals |
+| POST | `/v1/predict` | Upload file → classification |
+| POST | `/v1/qc/raster` | Upload file → QC report |
+| POST | `/v1/predict/bbox` | Bbox → EMIT search → classify |
+| GET | `/v1/maps/{uuid}` | Fetch completed map result |
+| GET | `/v1/maps/{uuid}/tiles/{z}/{x}/{y}.png` | Slippy map tiles |
+| GET | `/v1/jobs/{job_id}` | Bbox job status |
 
-This repository intentionally excludes private datasets, model weights, institutional branding, and proprietary spectra. See `PROVENANCE.md`.
+## Screenshots
 
-## License And Provenance
+![Open Ore Mapper development UI — globe basemap with open Settings panel showing sensor, classifier, minerals, and confidence controls](docs/assets/open-ore-mapper-ui.png)
 
-Open Ore Mapper is licensed under Apache-2.0. See `LICENSE` and `PROVENANCE.md`.
+*Development UI showing the MapLibre GL globe with the Settings panel open. The globe displays a dark CartoDB basemap centered on the Atlantic. The Settings panel exposes sensor selection (EMIT, Cubert, Custom), classifier choice (Continuum Removal, SAM), mineral toggles, confidence threshold slider, ACE/vegetation-mask switches, file upload, and the Map Minerals action button.*
+
+## Roadmap
+
+See [ROADMAP.md](ROADMAP.md).
+
+## License & Citation
+
+Apache 2.0. See [LICENSE](LICENSE) and [PROVENANCE.md](PROVENANCE.md).
+
+Spectral libraries cited in [SPECTRAL_LIBRARIES_RESEARCH.md](SPECTRAL_LIBRARIES_RESEARCH.md). Public hyperspectral scenes provided by the Grupo de Inteligencia Computacional, Universidad del País Vasco (EHU).
+
+---
+
+**This is a work-in-progress open-source project. All outputs are spectral candidates requiring field validation.**

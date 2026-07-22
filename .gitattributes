@@ -1,0 +1,34 @@
+* text=auto
+
+*.py text diff=python
+*.js text
+*.ts text
+*.tsx text
+*.json text
+*.csv text
+*.md text
+*.html text
+*.css text
+*.yml text
+*.yaml text
+*.toml text
+*.cfg text
+*.ini text
+
+*.tif -text
+*.tiff -text
+*.png -text
+*.jpg -text
+*.jpeg -text
+*.h5 -text
+*.hdf5 -text
+*.nc -text
+*.npy -text
+*.npz -text
+*.pkl -text
+*.pt -text
+*.pth -text
+*.db -text
+*.sqlite -text
+*.so -text
+*.lock -text
