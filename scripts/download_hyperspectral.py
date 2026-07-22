@@ -16,7 +16,6 @@ import os
 import sys
 import urllib.request
 import urllib.error
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -163,7 +162,7 @@ def enmap_search(bbox: list[float], max_results: int = 10) -> list[dict[str, Any
     """Search EnMAP products via DLR EOWEB OData. Requires DLR EOWEB account."""
     filter_str = (
         f"OData.CSC.Intersects(area=geography'SRID=4326;POLYGON(({bbox[0]} {bbox[1]},{bbox[2]} {bbox[1]},{bbox[2]} {bbox[3]},{bbox[0]} {bbox[3]},{bbox[0]} {bbox[1]}))')"
-        and f"AcquisitionType eq 'SCENE'"
+        and "AcquisitionType eq 'SCENE'"
     )
     url = f"{ENMAP_API_URL}?$filter={urllib.parse.quote(filter_str)}&$top={max_results}&$format=json"
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})

@@ -31,7 +31,7 @@ def test_predict_file_on_synthetic_cubert_like_tiff(tmp_path: Path) -> None:
     )
 
     assert result.status == "success"
-    assert result.model_used == "library_sam_nnls_v1"
+    assert result.model_used == "library_continuum_removal_nnls_v1"
     assert result.minerals == ["hematite_demo", "goethite_demo"]
     assert result.output_image.startswith("data:image/png;base64,")
     assert "hematite_demo" in result.statistics
@@ -44,7 +44,11 @@ def test_default_options_use_cubert_wavelength_preset(tmp_path: Path) -> None:
 
     result = OreMapper().predict_file(
         path,
-        MapperOptions(min_confidence=0.0, sam_threshold_deg=180.0),
+        MapperOptions(
+            minerals=["hematite_demo"],
+            min_confidence=0.0,
+            sam_threshold_deg=180.0,
+        ),
     )
 
     assert result.sensor == "cubert_ultris_s5"
@@ -52,32 +56,32 @@ def test_default_options_use_cubert_wavelength_preset(tmp_path: Path) -> None:
 
 
 def test_nnls_abundance_uses_raw_spectra_not_l2_normalized_spectra(tmp_path: Path) -> None:
-    library = SpectralLibrary(
-        names=["Bright", "Dim"],
-        wavelengths=np.array([500.0, 600.0], dtype=np.float32),
-        spectra=np.array([[2.0, 0.0], [0.0, 1.0]], dtype=np.float32),
-        source="synthetic test",
-    )
     cube = np.zeros((3, 3, 2), dtype=np.float32)
     cube[:, :, :] = np.array([1.0, 0.5], dtype=np.float32)
     path = tmp_path / "synthetic.tif"
     tifffile.imwrite(path, cube, photometric="minisblack")
 
-    with (
-        patch("open_ore_mapper.service.load_demo_library", return_value=library),
-        patch("open_ore_mapper.service.resample_library", return_value=library),
-    ):
-        result = OreMapper().predict_file(
-            path,
-            MapperOptions(
-                wavelengths=[500.0, 600.0],
-                sensor="manual",
-                minerals=["Bright", "Dim"],
-                sam_threshold_deg=180.0,
-                min_confidence=0.0,
-                normalization="l2",
-            ),
-        )
+    csv_path = tmp_path / "lib.csv"
+    csv_path.write_text(
+        "name,wavelength,reflectance\n"
+        "Bright,500,2.0\n"
+        "Bright,600,0.0\n"
+        "Dim,500,0.0\n"
+        "Dim,600,1.0\n"
+    )
+
+    result = OreMapper().predict_file(
+        path,
+        MapperOptions(
+            wavelengths=[500.0, 600.0],
+            sensor="manual",
+            minerals=["Bright", "Dim"],
+            spectral_library=str(csv_path),
+            sam_threshold_deg=180.0,
+            min_confidence=0.0,
+            normalization="l2",
+        ),
+    )
 
     assert result.statistics["Bright"].mean_abundance == pytest.approx(0.5)
 
@@ -89,7 +93,11 @@ def test_vnir_only_warning_is_emitted(tmp_path: Path) -> None:
 
     result = OreMapper().predict_file(
         path,
-        MapperOptions(min_confidence=0.0, sam_threshold_deg=180.0),
+        MapperOptions(
+            minerals=["hematite_demo"],
+            min_confidence=0.0,
+            sam_threshold_deg=180.0,
+        ),
     )
 
     assert any("SWIR" in warning for warning in result.warnings)
@@ -166,7 +174,7 @@ def test_predict_bytes_rejects_unsupported_extension() -> None:
 
 def test_prediction_excludes_user_band_and_returns_retained_wavelengths(tmp_path: Path) -> None:
     library_3band = SpectralLibrary(
-        names=["Hema", "Goet"],
+        names=["Hema_demo", "Goet_demo"],
         wavelengths=np.array([400.0, 500.0, 600.0], dtype=np.float32),
         spectra=np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]], dtype=np.float32),
         source="synthetic",
@@ -180,7 +188,7 @@ def test_prediction_excludes_user_band_and_returns_retained_wavelengths(tmp_path
         patch("open_ore_mapper.service.resample_library") as mock_resample,
     ):
         mock_resample.return_value = SpectralLibrary(
-            names=["Hema", "Goet"],
+            names=["Hema_demo", "Goet_demo"],
             wavelengths=np.array([400.0, 600.0], dtype=np.float32),
             spectra=np.array([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32),
             source="synthetic",
@@ -191,7 +199,7 @@ def test_prediction_excludes_user_band_and_returns_retained_wavelengths(tmp_path
             MapperOptions(
                 wavelengths=[400.0, 500.0, 600.0],
                 sensor="manual",
-                minerals=["Hema", "Goet"],
+                minerals=["Hema_demo", "Goet_demo"],
                 excluded_band_indices=[1],
                 sam_threshold_deg=180.0,
                 min_confidence=0.0,
@@ -210,7 +218,11 @@ def test_quality_report_attached_to_result(tmp_path: Path) -> None:
 
     result = OreMapper().predict_file(
         path,
-        MapperOptions(min_confidence=0.0, sam_threshold_deg=180.0),
+        MapperOptions(
+            minerals=["hematite_demo"],
+            min_confidence=0.0,
+            sam_threshold_deg=180.0,
+        ),
     )
 
     assert isinstance(result.quality_report, RasterQualityReport)
@@ -222,7 +234,7 @@ def test_quality_report_attached_to_result(tmp_path: Path) -> None:
 
 def test_qc_warnings_merged_into_result_warnings(tmp_path: Path) -> None:
     library_3band = SpectralLibrary(
-        names=["Hema", "Goet"],
+        names=["Hema_demo", "Goet_demo"],
         wavelengths=np.array([400.0, 500.0, 600.0], dtype=np.float32),
         spectra=np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]], dtype=np.float32),
         source="synthetic",
@@ -236,7 +248,7 @@ def test_qc_warnings_merged_into_result_warnings(tmp_path: Path) -> None:
         patch("open_ore_mapper.service.resample_library") as mock_resample,
     ):
         mock_resample.return_value = SpectralLibrary(
-            names=["Hema", "Goet"],
+            names=["Hema_demo", "Goet_demo"],
             wavelengths=np.array([400.0, 600.0], dtype=np.float32),
             spectra=np.array([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32),
             source="synthetic",
@@ -247,7 +259,7 @@ def test_qc_warnings_merged_into_result_warnings(tmp_path: Path) -> None:
             MapperOptions(
                 wavelengths=[400.0, 500.0, 600.0],
                 sensor="manual",
-                minerals=["Hema", "Goet"],
+                minerals=["Hema_demo", "Goet_demo"],
                 excluded_band_indices=[1],
                 sam_threshold_deg=180.0,
                 min_confidence=0.0,
@@ -481,3 +493,103 @@ def test_mat_file_int16_qc(tmp_path: Path) -> None:
     )
     assert report.status == "pass"
     assert report.band_count == 3
+
+
+def test_real_mineral_names_raise_error_when_relab_fails(tmp_path: Path) -> None:
+    cube = np.ones((4, 4, 3), dtype=np.float32) * 0.5
+    path = tmp_path / "real_minerals.tif"
+    tifffile.imwrite(path, cube, photometric="minisblack")
+
+    with patch("open_ore_mapper.relab_fetcher.build_spectral_library") as mock_build:
+        mock_build.side_effect = RuntimeError("RELAB unavailable")
+
+        with pytest.raises(ValueError, match="Authoritative spectra are unavailable"):
+            OreMapper().predict_file(
+                path,
+                MapperOptions(
+                    wavelengths=[400.0, 500.0, 600.0],
+                    sensor="manual",
+                    minerals=["hematite", "goethite"],
+                    min_confidence=0.0,
+                    sam_threshold_deg=180.0,
+                ),
+            )
+
+
+def test_demo_minerals_still_work_after_relab_failure(tmp_path: Path) -> None:
+    cube = np.ones((4, 4, 3), dtype=np.float32) * 0.5
+    path = tmp_path / "demo_minerals.tif"
+    tifffile.imwrite(path, cube, photometric="minisblack")
+
+    with patch("open_ore_mapper.relab_fetcher.build_spectral_library") as mock_build:
+        mock_build.side_effect = RuntimeError("RELAB unavailable")
+
+        result = OreMapper().predict_file(
+            path,
+            MapperOptions(
+                wavelengths=[400.0, 500.0, 600.0],
+                sensor="manual",
+                minerals=["hematite_demo", "goethite_demo"],
+                min_confidence=0.0,
+                sam_threshold_deg=180.0,
+            ),
+        )
+
+    assert result.status == "success"
+    assert "hematite_demo" in result.minerals
+    assert "goethite_demo" in result.minerals
+
+
+def test_user_csv_library_bypasses_relab_fallback(tmp_path: Path) -> None:
+    cube = np.ones((4, 4, 2), dtype=np.float32) * 0.5
+    path = tmp_path / "csv_library.tif"
+    tifffile.imwrite(path, cube, photometric="minisblack")
+
+    csv_path = tmp_path / "test_library.csv"
+    csv_path.write_text(
+        "name,wavelength,reflectance\n"
+        "hematite,400,0.5\n"
+        "hematite,500,0.6\n"
+        "goethite,400,0.4\n"
+        "goethite,500,0.3\n"
+    )
+
+    result = OreMapper().predict_file(
+        path,
+        MapperOptions(
+            wavelengths=[400.0, 500.0],
+            sensor="manual",
+            minerals=["hematite", "goethite"],
+            spectral_library=str(csv_path),
+            min_confidence=0.0,
+            sam_threshold_deg=180.0,
+        ),
+    )
+
+    assert result.status == "success"
+    assert result.minerals == ["hematite", "goethite"]
+
+
+def test_mtmf_default_is_false() -> None:
+    opts = MapperOptions()
+    assert opts.use_mtmf is False
+
+
+def test_mtmf_true_is_inert_and_does_not_crash(tmp_path: Path) -> None:
+    cube = np.ones((4, 4, 3), dtype=np.float32) * 0.5
+    path = tmp_path / "mtmf_inert.tif"
+    tifffile.imwrite(path, cube, photometric="minisblack")
+
+    result = OreMapper().predict_file(
+        path,
+        MapperOptions(
+            wavelengths=[400.0, 500.0, 600.0],
+            sensor="manual",
+            minerals=["hematite_demo", "goethite_demo"],
+            use_mtmf=True,
+            min_confidence=0.0,
+            sam_threshold_deg=180.0,
+        ),
+    )
+
+    assert result.status == "success"
