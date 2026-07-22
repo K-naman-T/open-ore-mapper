@@ -101,7 +101,7 @@ export function SettingsPanel({
           {/* Sensor */}
           <section>
             <label className="text-xs font-medium text-text-secondary mb-2 block">Sensor</label>
-            <div className="flex gap-1">
+            <div className="flex gap-0.5">
               {SENSORS.map((s) => (
                 <button
                   key={s}
@@ -121,7 +121,7 @@ export function SettingsPanel({
           {/* Classifier */}
           <section>
             <label className="text-xs font-medium text-text-secondary mb-2 block">Classifier</label>
-            <div className="flex gap-1">
+            <div className="flex gap-0.5">
               {CLASSIFIERS.map((c) => (
                 <button
                   key={c}
@@ -141,7 +141,7 @@ export function SettingsPanel({
           {/* Minerals */}
           <section>
             <label className="text-xs font-medium text-text-secondary mb-2 block">Minerals</label>
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex flex-wrap gap-[3px]">
               {ALL_MINERALS.map((m, i) => (
                 <button
                   key={m}
