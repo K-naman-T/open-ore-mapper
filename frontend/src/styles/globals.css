@@ -45,9 +45,9 @@
   --color-red: #f13242;
   --color-red-soft: #f1324218;
 
-  /* Geist type: sans for UI, mono for data */
-  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-mono: "SF Mono", "Fira Code", "Fira Mono", monospace;
+  /* Teko for interface text, IBM Plex Mono for data and keycaps. */
+  --font-sans: "Teko", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", "SF Mono", "Fira Code", "Fira Mono", monospace;
 
   /* Heading token */
   --text-heading-32: 32px;
@@ -72,6 +72,8 @@ html, body, #root {
   background: var(--color-bg-0);
   color: var(--color-text-primary);
   font-family: var(--font-sans);
+  line-height: 1.4;
+  letter-spacing: 0.02em;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -83,6 +85,24 @@ html, body, #root {
 :focus-visible {
   box-shadow: 0 0 0 2px var(--color-bg-0), 0 0 0 4px var(--color-accent-hover);
   outline: none;
+}
+
+.keycap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 20px;
+  padding: 0 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1;
+  color: var(--color-accent);
+  background: var(--color-accent-soft);
+  border: 1px solid var(--color-accent);
+  border-radius: 4px;
+  box-shadow: 0 2px 0 color-mix(in srgb, var(--color-accent) 45%, transparent);
+  letter-spacing: 0;
 }
 
 ::-webkit-scrollbar { width: 6px; height: 6px; }

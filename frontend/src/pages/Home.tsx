@@ -142,7 +142,7 @@ export function Home() {
         <div data-wt="cue" className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 pointer-events-none animate-[fade-in_400ms_ease-out]">
           <div className="bg-bg-1/80 backdrop-blur-sm border border-border-default rounded-lg px-4 py-2 shadow-lg">
             <p className="text-xs text-text-tertiary whitespace-nowrap">
-              <kbd className="font-mono text-accent text-[11px]">Shift</kbd>
+              <kbd className="keycap">Shift</kbd>
               {" + drag to select an area of interest"}
             </p>
           </div>
