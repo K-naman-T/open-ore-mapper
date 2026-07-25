@@ -19,11 +19,15 @@ Do not skip honesty of Phase 0 when adding features.
 
 ## v0.2 — Wire product path cleanly
 
-- [x] `fuse_classical` / MTMF / MNF / CR dispatch in `OreMapper`  
-- [ ] Schema + CLI + API default classifier aligned with product (`fuse_classical` or documented library preset)  
-- [ ] Hide or hard-disable unwired ACE / vegetation / SUnSAL in UI  
-- [ ] Curated USGS mineral pack for unlabeled runs (no pure-GT endmembers required)
+**Research (2026-07-26):** [`docs/research_scrapes/ITERATIVE_BUILD_NEXT_2026.md`](docs/research_scrapes/ITERATIVE_BUILD_NEXT_2026.md) · [`USGS_LIBRARY_NEXT_PACK_2026.md`](docs/research_scrapes/USGS_LIBRARY_NEXT_PACK_2026.md)
 
+- [x] `fuse_classical` / MTMF / MNF / CR dispatch in `OreMapper`  
+- [ ] **I1 (next PR):** Schema + CLI + API default → `fuse_classical`; expose in CLI choices  
+- [ ] **I2:** Hide or hard-disable unwired ACE / vegetation / SUnSAL in UI  
+- [ ] **I3:** Named product preset + docs for library path  
+- [ ] **I4:** Open-set / unknown rate on scoreboard  
+- [ ] **I5:** Curated USGS splib07 mineral pack (public domain; see USGS pack research)  
+- [ ] **I6:** Track A multi-seed with fixed USGS library (not scene pure-GT endmembers)
 ## v0.3 — EMIT Path B (after Path A is boring)
 
 - [ ] Progress reporting (real, not fake 0–90%)  
