@@ -67,11 +67,12 @@ class MapperOptions:
     normalization: str = "l2"
     excluded_band_indices: list[int] = field(default_factory=list)
     min_band_valid_fraction: float = 0.5
-    classifier: str = "continuum_removal"
+    classifier: str = "sam"
     use_ace: bool = False
     use_mtmf: bool = False
     mf_threshold: float = 0.5
     infeas_threshold: float = 10.0
+    n_mnf_components: int = 20
     unmixing: str = "auto"
     vegetation_mask: bool = False
     ndvi_threshold: float = 0.3

@@ -1,0 +1,15 @@
+ENVI
+description = {
+  Kaolinite KGa-2 pxl                      F*D'  
+  }
+ samples =          614
+ lines   =          750
+ bands   =            1
+ header offset =          614
+file compression = 1
+file type = ENVI Standard
+data type = 1
+interleave = bsq
+sensor type = spectral data
+byte order = 0
+wavelength units = Micrometers

@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 from typing import Sequence
 
+from .benchmark import run_benchmark
 from .public_scenes import download_scene, scene_catalog_as_json
 from .schemas import DEFAULT_DEMO_MINERALS, MapperOptions
 from .service import OreMapper
@@ -43,7 +44,49 @@ def _build_parser() -> argparse.ArgumentParser:
     predict.add_argument("--normalization", choices=["none", "l2", "percentile"], default="l2")
     predict.add_argument("--exclude-bands", help="Comma-separated zero-based band indices to exclude (e.g. 0,3,10)")
     predict.add_argument("--min-band-valid-fraction", type=float, default=0.5)
+    predict.add_argument(
+        "--classifier",
+        default="sam",
+        choices=[
+            "sam",
+            "sff",
+            "continuum_removal",
+            "mtmf",
+            "mnf_sam",
+            "mnf_mtmf",
+        ],
+        help=(
+            "Classifier: sam=SAM+NNLS, sff=spectral feature fitting, "
+            "continuum_removal=CR region SAM, mtmf=mixture-tuned MF, "
+            "mnf_sam=MNF+SAM, mnf_mtmf=MNF then MTMF"
+        ),
+    )
+    predict.add_argument("--mf-threshold", type=float, default=0.5, help="MTMF MF acceptance threshold")
+    predict.add_argument(
+        "--infeas-threshold",
+        type=float,
+        default=10.0,
+        help="MTMF infeasibility rejection threshold",
+    )
+    predict.add_argument(
+        "--n-mnf-components",
+        type=int,
+        default=20,
+        help="MNF components for mnf_sam / mnf_mtmf",
+    )
     predict.set_defaults(func=_run_predict)
+
+    evaluate = subparsers.add_parser(
+        "evaluate",
+        help="Run predict+scorecard on a benchmark package (scene, library, reference/ROIs)",
+    )
+    evaluate.add_argument(
+        "--benchmark",
+        required=True,
+        help="Path to benchmark directory (e.g. benchmarks/demo_fixture)",
+    )
+    evaluate.add_argument("--output-dir", required=True, help="Directory for metrics and diff PNGs")
+    evaluate.set_defaults(func=_run_evaluate)
 
     qc = subparsers.add_parser("qc-raster", help="Run raster quality control and band analysis")
     qc.add_argument("input", help="Input .tif, .tiff, .h5, .hdf5, or .mat raster cube")
@@ -105,6 +148,10 @@ def _run_predict(args: argparse.Namespace) -> int:
         normalization=str(args.normalization),
         excluded_band_indices=excluded,
         min_band_valid_fraction=float(args.min_band_valid_fraction),
+        classifier=str(getattr(args, "classifier", "sam")),
+        mf_threshold=float(getattr(args, "mf_threshold", 0.5)),
+        infeas_threshold=float(getattr(args, "infeas_threshold", 10.0)),
+        n_mnf_components=int(getattr(args, "n_mnf_components", 20)),
     )
     mapper = OreMapper()
     result = mapper.predict_file(args.input, options)
@@ -120,6 +167,15 @@ def _run_predict(args: argparse.Namespace) -> int:
     _write_png(output_dir / "confidence.png", result.confidence_image)
     _write_png(output_dir / "top_abundance.png", result.top_abundance_image)
     print(f"Wrote results to {output_dir}")
+    return 0
+
+
+def _run_evaluate(args: argparse.Namespace) -> int:
+    summary = run_benchmark(args.benchmark, args.output_dir)
+    oa = summary.get("overall_accuracy")
+    kappa = summary.get("kappa")
+    print(f"Wrote evaluation to {args.output_dir}")
+    print(f"  overall_accuracy={oa:.4f}  kappa={kappa:.4f}  model={summary.get('model_used')}")
     return 0
 
 

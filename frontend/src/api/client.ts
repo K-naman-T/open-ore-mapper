@@ -18,6 +18,29 @@ export interface JobStatus {
   progress: number
 }
 
+export interface ScorecardPerClass {
+  name: string
+  precision: number
+  recall: number
+  f1?: number
+  support?: number
+  predicted?: number
+}
+
+export interface Scorecard {
+  overall_accuracy?: number
+  kappa?: number
+  n_labeled?: number
+  n_correct?: number
+  per_class?: ScorecardPerClass[]
+  class_names?: string[]
+  model_used?: string
+  our_image?: string
+  reference_image?: string
+  diff_image?: string
+  output_dir?: string
+}
+
 export interface MapResult {
   map_uuid: string
   status: string
@@ -31,6 +54,7 @@ export interface MapResult {
   statistics: Record<string, MineralStat>
   warnings: string[]
   quality_report: QCReport
+  scorecard?: Scorecard
 }
 
 export interface MineralStat {

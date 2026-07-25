@@ -31,7 +31,7 @@ def test_predict_file_on_synthetic_cubert_like_tiff(tmp_path: Path) -> None:
     )
 
     assert result.status == "success"
-    assert result.model_used == "library_continuum_removal_nnls_v1"
+    assert result.model_used == "library_sam_nnls_v1"
     assert result.minerals == ["hematite_demo", "goethite_demo"]
     assert result.output_image.startswith("data:image/png;base64,")
     assert "hematite_demo" in result.statistics
@@ -503,7 +503,7 @@ def test_real_mineral_names_raise_error_when_relab_fails(tmp_path: Path) -> None
     with patch("open_ore_mapper.relab_fetcher.build_spectral_library") as mock_build:
         mock_build.side_effect = RuntimeError("RELAB unavailable")
 
-        with pytest.raises(ValueError, match="Authoritative spectra are unavailable"):
+        with pytest.raises(ValueError, match="Authoritative spectra unavailable"):
             OreMapper().predict_file(
                 path,
                 MapperOptions(
@@ -575,9 +575,9 @@ def test_mtmf_default_is_false() -> None:
     assert opts.use_mtmf is False
 
 
-def test_mtmf_true_is_inert_and_does_not_crash(tmp_path: Path) -> None:
+def test_use_mtmf_true_runs_mtmf_path(tmp_path: Path) -> None:
     cube = np.ones((4, 4, 3), dtype=np.float32) * 0.5
-    path = tmp_path / "mtmf_inert.tif"
+    path = tmp_path / "mtmf_flag.tif"
     tifffile.imwrite(path, cube, photometric="minisblack")
 
     result = OreMapper().predict_file(
@@ -587,9 +587,11 @@ def test_mtmf_true_is_inert_and_does_not_crash(tmp_path: Path) -> None:
             sensor="manual",
             minerals=["hematite_demo", "goethite_demo"],
             use_mtmf=True,
+            mf_threshold=0.0,
+            infeas_threshold=1e6,
             min_confidence=0.0,
             sam_threshold_deg=180.0,
         ),
     )
-
     assert result.status == "success"
+    assert "mtmf" in result.model_used

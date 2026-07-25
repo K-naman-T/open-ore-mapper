@@ -20,10 +20,10 @@ export function Home() {
 
   const [sensor, setSensor] = useState("EMIT")
   const [minerals, setMinerals] = useState(["hematite", "goethite", "jarosite", "magnetite", "limonite", "ferrihydrite"])
-  const [classifier, setClassifier] = useState("Continuum Removal")
+  const [classifier, setClassifier] = useState("SAM")
   const [confidence, setConfidence] = useState(0.85)
-  const [ace, setAce] = useState(true)
-  const [vegMask, setVegMask] = useState(true)
+  const [ace, setAce] = useState(false)
+  const [vegMask, setVegMask] = useState(false)
 
   const [file, setFile] = useState<File | null>(null)
   const [bbox, setBbox] = useState<Bbox | null>(null)
@@ -34,8 +34,58 @@ export function Home() {
 
   const canMap = (!!bbox || !!file) && minerals.length > 0
 
+  const handleTryBenchmark = useCallback(async () => {
+    setProcessing(true)
+    setProgress(10)
+    try {
+      const res = await fetch("/api/v1/benchmarks/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          benchmark: "benchmarks/demo_fixture",
+          output_dir: "outputs/demo-fixture-eval",
+        }),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(body.detail ?? body.error ?? "Benchmark failed")
+      setProgress(100)
+      const uuid = crypto.randomUUID()
+      sessionStorage.setItem(
+        `map-${uuid}`,
+        JSON.stringify({
+          map_uuid: uuid,
+          status: "success",
+          model_used: body.model_used ?? "library_sam_nnls_v1",
+          sensor: "benchmark",
+          wavelengths: [],
+          minerals: body.class_names ?? [],
+          output_image: body.our_image ?? "",
+          confidence_image: body.diff_image ?? "",
+          top_abundance_image: body.reference_image ?? "",
+          statistics: {},
+          warnings: [
+            `Map-to-map agreement (OA): ${Number(body.overall_accuracy ?? 0).toFixed(3)}`,
+            `Kappa: ${Number(body.kappa ?? 0).toFixed(3)}`,
+            "Demo fixture scorecard — planted labels, not field ground truth, not ore proof",
+          ],
+          quality_report: { status: "benchmark", shape: [0, 0, 0], band_count: 0, retained_band_indices: [], excluded_band_indices: [], valid_pixel_fraction: 1, warnings: [] },
+          scorecard: body,
+        }),
+      )
+      setProcessing(false)
+      navigate(`/maps/${uuid}`)
+    } catch (err) {
+      setProcessing(false)
+      toast(err instanceof Error ? err.message : "Benchmark failed", "error")
+    }
+  }, [toast, navigate])
+
   const handleMapMinerals = useCallback(async () => {
     if (!minerals.length) { toast("Select at least one mineral", "error"); return }
+    if (ace || vegMask) {
+      toast("ACE and vegetation mask are not wired — leave them off", "error")
+      return
+    }
     setProcessing(true)
     setProgress(0)
     progressRef.current = 0
@@ -46,13 +96,14 @@ export function Home() {
     }, 300)
 
     try {
+      const clf = classifier.toLowerCase().includes("sff") ? "sff" : "sam"
       const options = {
         minerals,
         sensor: sensor.toLowerCase().replace(" ", "_"),
-        classifier: classifier.toLowerCase().replace(" ", "_"),
+        classifier: clf,
         min_confidence: confidence,
-        use_ace: ace,
-        vegetation_mask: vegMask,
+        use_ace: false,
+        vegetation_mask: false,
       }
       const result = file
         ? await uploadAndPredict(file, options)
@@ -130,11 +181,20 @@ export function Home() {
           onBboxChange={(b) => { setBbox(b); if (b) setPanelOpen(true) }} />
       )}
 
-      {/* Logo */}
-      <div className="absolute top-4 left-4 z-10 pointer-events-none">
-        <h1 className="text-sm font-semibold text-text-primary/80 tracking-tight select-none">
+      {/* Logo + demo scorecard CTA */}
+      <div className="absolute top-4 left-4 z-10 flex items-center gap-2">
+        <h1 className="text-sm font-semibold text-text-primary/80 tracking-tight select-none pointer-events-none">
           Open Ore Mapper
         </h1>
+        <button
+          type="button"
+          onClick={handleTryBenchmark}
+          disabled={processing}
+          className="h-8 px-3 text-xs font-medium rounded-lg bg-accent/15 text-accent border border-accent/25
+            hover:bg-accent/25 disabled:opacity-40 transition-colors pointer-events-auto"
+        >
+          Try demo scorecard
+        </button>
       </div>
 
       {/* Shift-drag cue */}
@@ -142,7 +202,7 @@ export function Home() {
         <div data-wt="cue" className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 pointer-events-none animate-[fade-in_400ms_ease-out]">
           <div className="bg-bg-1/80 backdrop-blur-sm border border-border-default rounded-lg px-4 py-2 shadow-lg">
             <p className="text-xs text-text-tertiary whitespace-nowrap">
-              <kbd className="keycap">Shift</kbd>
+              <kbd className="font-mono text-accent text-[11px]">Shift</kbd>
               {" + drag to select an area of interest"}
             </p>
           </div>
@@ -186,6 +246,7 @@ export function Home() {
         file={file} onFileChange={setFile}
         bbox={bbox}
         onMapMinerals={handleMapMinerals}
+        onTryBenchmark={handleTryBenchmark}
         processing={processing}
         canMap={canMap}
         dataWt="map-btn"

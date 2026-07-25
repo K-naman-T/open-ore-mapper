@@ -16,12 +16,30 @@ from .sam import angles_to_strength, compute_sam_angles
 from .schemas import MapperOptions, MapperResult
 from .spectral_library import SpectralLibrary, load_csv_library, load_demo_library, resample_library
 from .tiling import iter_tiles
+from .cr_sam import classify_cube_cr_sam
+from .mnf import apply_mnf, mnf_data_mean, mnf_transform
+from .mtmf import mtmf
 from .sff import sff_classify_cube
 from .unmixing import estimate_nnls_abundances
 from .wavelengths import resolve_wavelengths, validate_wavelengths
 
 
 UNKNOWN_CLASS = 255
+
+# Classifiers fully implemented in _classify_core (not remapped to SAM).
+_IMPLEMENTED_CLASSIFIERS = frozenset(
+    {
+        "sam",
+        "sff",
+        "continuum_removal",
+        "cr_sam",
+        "mtmf",
+        "mnf_sam",
+        "mnf_mtmf",
+        "fuse",
+        "fuse_classical",
+    }
+)
 
 
 def _mat_ensure_hwc(arr: np.ndarray, band_count_hint: int | None = None) -> np.ndarray:
@@ -97,9 +115,24 @@ class OreMapper:
 
         top_abundance = np.max(abundance_cube, axis=2)
         all_warnings = self._coverage_warnings(retained_wls) + report.warnings
+        effective = self._effective_classifier(
+            selected_options.classifier, use_mtmf=selected_options.use_mtmf
+        )
+        requested = (selected_options.classifier or "sam").strip().lower().replace(" ", "_")
+        if selected_options.use_mtmf and requested not in ("mtmf", "mnf_mtmf"):
+            all_warnings.append("use_mtmf=True selected MTMF path")
+        if effective != requested and not (
+            selected_options.use_mtmf and effective == "mtmf"
+        ):
+            if requested not in _IMPLEMENTED_CLASSIFIERS and requested != "cr_sam":
+                all_warnings.append(
+                    f"classifier={selected_options.classifier!r} is not implemented; "
+                    f"ran {effective!r} instead"
+                )
+        model_tag = self._model_tag(effective)
         return MapperResult(
             status="success",
-            model_used=f"library_{selected_options.classifier}_nnls_v1",
+            model_used=f"library_{model_tag}_v1",
             sensor=sensor,
             wavelengths=retained_wls,
             minerals=library.names,
@@ -125,7 +158,7 @@ class OreMapper:
         abundance_cube_input = normalize_cube(cube, "none")
         abundance_refs = normalize_cube(library.spectra[np.newaxis, :, :], "none")[0]
 
-        use_sff = options.classifier == "sff"
+        effective = self._effective_classifier(options.classifier, use_mtmf=options.use_mtmf)
 
         wavelengths_np = np.array(wavelengths, dtype=np.float32)
         height, width, _bands = normalized_cube.shape
@@ -134,12 +167,77 @@ class OreMapper:
         confidence_map = np.zeros((height, width), dtype=np.float32)
         abundance_cube = np.zeros((height, width, mineral_count), dtype=np.float32)
 
-        if use_sff:
+        if options.use_ace:
+            raise ValueError(
+                "use_ace=True is not wired into the classification pipeline; "
+                "disable ACE or wait for a supported release"
+            )
+        if options.vegetation_mask:
+            raise ValueError(
+                "vegetation_mask=True is not wired into the classification pipeline; "
+                "disable vegetation_mask or wait for a supported release"
+            )
+
+        if effective == "sff":
             class_map, confidence_map = sff_classify_cube(
                 normalized_cube, wavelengths_np, mineral_names=library.names
             )
-
-        if not use_sff:
+        elif effective == "continuum_removal":
+            # Continuum-removed + VNIR/SWIR hierarchical SAM (CPU classical)
+            class_map, confidence_map = classify_cube_cr_sam(
+                abundance_cube_input,  # raw reflectance (not L2) for CR
+                abundance_refs,
+                wavelengths_np,
+                library.names,
+                valid_mask,
+                tile_size=options.tile_size,
+                sam_threshold_deg=options.sam_threshold_deg,
+                min_strength=options.min_confidence,
+            )
+            self._fill_nnls_abundances(
+                abundance_cube,
+                abundance_cube_input,
+                abundance_refs,
+                valid_mask,
+                mineral_count,
+                options.tile_size,
+            )
+        elif effective == "mtmf":
+            class_map, confidence_map, abundance_cube = self._classify_mtmf(
+                abundance_cube_input,
+                abundance_refs,
+                valid_mask,
+                options,
+                mineral_count,
+            )
+        elif effective == "mnf_sam":
+            class_map, confidence_map, abundance_cube = self._classify_mnf_sam(
+                abundance_cube_input,
+                abundance_refs,
+                valid_mask,
+                options,
+                mineral_count,
+            )
+        elif effective == "mnf_mtmf":
+            class_map, confidence_map, abundance_cube = self._classify_mnf_mtmf(
+                abundance_cube_input,
+                abundance_refs,
+                valid_mask,
+                options,
+                mineral_count,
+            )
+        elif effective in ("fuse", "fuse_classical"):
+            class_map, confidence_map, abundance_cube = self._classify_fuse_classical(
+                abundance_cube_input,
+                abundance_refs,
+                wavelengths_np,
+                library.names,
+                valid_mask,
+                options,
+                mineral_count,
+            )
+        else:
+            # Default: SAM + NNLS
             for row0, row1, col0, col1 in iter_tiles(height, width, options.tile_size):
                 tile = normalized_cube[row0:row1, col0:col1, :]
                 abundance_tile = abundance_cube_input[row0:row1, col0:col1, :]
@@ -180,6 +278,168 @@ class OreMapper:
                 )
 
         return class_map, confidence_map, abundance_cube
+
+    @staticmethod
+    def _fill_nnls_abundances(
+        abundance_cube: NDArray[np.float32],
+        cube: NDArray[np.floating[Any]],
+        refs: NDArray[np.floating[Any]],
+        valid_mask: NDArray[np.bool_],
+        mineral_count: int,
+        tile_size: int,
+    ) -> None:
+        height, width, _ = cube.shape
+        for row0, row1, col0, col1 in iter_tiles(height, width, tile_size):
+            abundance_tile = cube[row0:row1, col0:col1, :]
+            tile_valid = valid_mask[row0:row1, col0:col1]
+            abundance_flat = abundance_tile.reshape(-1, abundance_tile.shape[2])
+            flat_valid = tile_valid.reshape(-1)
+            if not np.any(flat_valid):
+                continue
+            abundances = estimate_nnls_abundances(abundance_flat[flat_valid], refs)
+            tile_abund = np.zeros((flat_valid.shape[0], mineral_count), dtype=np.float32)
+            tile_abund[np.where(flat_valid)[0]] = abundances
+            abundance_cube[row0:row1, col0:col1, :] = tile_abund.reshape(
+                row1 - row0, col1 - col0, mineral_count
+            )
+
+    @staticmethod
+    def _classify_mtmf(
+        cube: NDArray[np.floating[Any]],
+        refs: NDArray[np.floating[Any]],
+        valid_mask: NDArray[np.bool_],
+        options: MapperOptions,
+        mineral_count: int,
+    ) -> tuple[NDArray[np.uint8], NDArray[np.float32], NDArray[np.float32]]:
+        """Mixture-Tuned Matched Filter multi-class assignment.
+
+        For each pixel, pick argmax MF among library targets; accept only if
+        MF >= mf_threshold and infeasibility <= infeas_threshold; else unknown 255.
+        Confidence = clipped MF of the winner. Abundances = non-negative MF scores
+        renormalized per pixel (soft estimate; not physical unmixing).
+        """
+        h, w, _b = cube.shape
+        cube_f = np.asarray(cube, dtype=np.float32)
+        refs_f = np.asarray(refs, dtype=np.float32)
+        mf, infeas = mtmf(cube_f, refs_f, valid_mask=valid_mask)
+
+        class_map = np.full((h, w), UNKNOWN_CLASS, dtype=np.uint8)
+        confidence_map = np.zeros((h, w), dtype=np.float32)
+        abundance_cube = np.zeros((h, w, mineral_count), dtype=np.float32)
+
+        best_idx = np.argmax(mf, axis=2).astype(np.uint8)
+        best_mf = np.max(mf, axis=2).astype(np.float32)
+        # Gather infeas of the winning class
+        ii, jj = np.indices((h, w))
+        best_infeas = infeas[ii, jj, best_idx]
+
+        accepted = (
+            valid_mask
+            & (best_mf >= options.mf_threshold)
+            & (best_infeas <= options.infeas_threshold)
+        )
+        class_map[accepted] = best_idx[accepted]
+        confidence_map[valid_mask] = np.clip(best_mf[valid_mask], 0.0, 1.0)
+
+        # Soft abundances from max(MF, 0)
+        soft = np.maximum(mf, 0.0).astype(np.float32)
+        totals = np.sum(soft, axis=2, keepdims=True)
+        totals = np.maximum(totals, 1e-10)
+        abundance_cube = soft / totals
+        abundance_cube[~valid_mask] = 0.0
+        return class_map, confidence_map, abundance_cube
+
+    @staticmethod
+    def _classify_mnf_sam(
+        cube: NDArray[np.floating[Any]],
+        refs: NDArray[np.floating[Any]],
+        valid_mask: NDArray[np.bool_],
+        options: MapperOptions,
+        mineral_count: int,
+    ) -> tuple[NDArray[np.uint8], NDArray[np.float32], NDArray[np.float32]]:
+        """MNF-whiten cube + library, then SAM angles with light NNLS on original spectra.
+
+        MNF reduces noise dimensions before spectral angle matching; NNLS abundances
+        are estimated in the original reflectance space for reporting.
+        """
+        h, w, _b = cube.shape
+        cube_f = np.asarray(cube, dtype=np.float32)
+        refs_f = np.asarray(refs, dtype=np.float32)
+        n_comp = max(1, int(options.n_mnf_components))
+
+        mnf_cube, tmat = mnf_transform(cube_f, valid_mask, n_components=n_comp)
+        mu = mnf_data_mean(cube_f, valid_mask)
+        refs_mnf = apply_mnf(refs_f, tmat, data_mean=mu)
+
+        class_map = np.full((h, w), UNKNOWN_CLASS, dtype=np.uint8)
+        confidence_map = np.zeros((h, w), dtype=np.float32)
+        abundance_cube = np.zeros((h, w, mineral_count), dtype=np.float32)
+
+        for row0, row1, col0, col1 in iter_tiles(h, w, options.tile_size):
+            tile = mnf_cube[row0:row1, col0:col1, :]
+            abundance_tile = cube_f[row0:row1, col0:col1, :]
+            tile_valid = valid_mask[row0:row1, col0:col1]
+            flat = tile.reshape(-1, tile.shape[2])
+            abundance_flat = abundance_tile.reshape(-1, abundance_tile.shape[2])
+            flat_valid = tile_valid.reshape(-1)
+            if not np.any(flat_valid):
+                continue
+
+            valid_pixels = flat[flat_valid]
+            abundance_pixels = abundance_flat[flat_valid]
+            angles = compute_sam_angles(valid_pixels, refs_mnf)
+            strength = angles_to_strength(angles)
+            abundances = estimate_nnls_abundances(abundance_pixels, refs_f)
+            # Light blend: primarily SAM in MNF space
+            combined = 0.75 * strength + 0.25 * abundances
+            best_idx = np.argmax(combined, axis=1).astype(np.uint8)
+            best_conf = np.max(combined, axis=1).astype(np.float32)
+            best_angle = np.min(angles, axis=1).astype(np.float32)
+            accepted = (best_conf >= options.min_confidence) & (
+                best_angle <= options.sam_threshold_deg
+            )
+
+            tile_classes = np.full(flat_valid.shape, UNKNOWN_CLASS, dtype=np.uint8)
+            tile_conf = np.zeros(flat_valid.shape, dtype=np.float32)
+            tile_abund = np.zeros((flat_valid.shape[0], mineral_count), dtype=np.float32)
+            valid_positions = np.where(flat_valid)[0]
+            tile_classes[valid_positions[accepted]] = best_idx[accepted]
+            tile_conf[valid_positions] = best_conf
+            tile_abund[valid_positions] = abundances
+
+            class_map[row0:row1, col0:col1] = tile_classes.reshape(row1 - row0, col1 - col0)
+            confidence_map[row0:row1, col0:col1] = tile_conf.reshape(row1 - row0, col1 - col0)
+            abundance_cube[row0:row1, col0:col1, :] = tile_abund.reshape(
+                row1 - row0, col1 - col0, mineral_count
+            )
+
+        return class_map, confidence_map, abundance_cube
+
+    @staticmethod
+    def _classify_mnf_mtmf(
+        cube: NDArray[np.floating[Any]],
+        refs: NDArray[np.floating[Any]],
+        valid_mask: NDArray[np.bool_],
+        options: MapperOptions,
+        mineral_count: int,
+    ) -> tuple[NDArray[np.uint8], NDArray[np.float32], NDArray[np.float32]]:
+        """Fused path: MNF transform of cube + library, then MTMF in reduced space.
+
+        Noise-whitened low-dimensional MTMF keeps covariance estimation stable
+        when B is large relative to the number of background samples. Assignment
+        rules match :meth:`_classify_mtmf` (MF / infeasibility thresholds).
+        """
+        cube_f = np.asarray(cube, dtype=np.float32)
+        refs_f = np.asarray(refs, dtype=np.float32)
+        n_comp = max(1, int(options.n_mnf_components))
+
+        mnf_cube, tmat = mnf_transform(cube_f, valid_mask, n_components=n_comp)
+        mu = mnf_data_mean(cube_f, valid_mask)
+        refs_mnf = apply_mnf(refs_f, tmat, data_mean=mu)
+
+        return OreMapper._classify_mtmf(
+            mnf_cube, refs_mnf, valid_mask, options, mineral_count
+        )
 
     def to_response(self, result: MapperResult) -> dict[str, Any]:
         response = asdict(result)
@@ -293,31 +553,148 @@ class OreMapper:
             return validate_wavelengths(embedded_wavelengths, expected_bands), "embedded_hdf5"
         return resolve_wavelengths(None, options.sensor, expected_bands)
 
+    @staticmethod
+    def _effective_classifier(classifier: str, use_mtmf: bool = False) -> str:
+        """Map requested classifier to what the pipeline actually runs."""
+        name = (classifier or "sam").strip().lower().replace(" ", "_")
+        if name == "cr_sam":
+            name = "continuum_removal"
+        if use_mtmf and name not in ("mtmf", "mnf_mtmf", "mnf_sam"):
+            # Legacy flag: force MTMF when classifier is still the default SAM path
+            return "mtmf"
+        if name in (
+            "sam",
+            "sff",
+            "continuum_removal",
+            "mtmf",
+            "mnf_sam",
+            "mnf_mtmf",
+            "fuse",
+            "fuse_classical",
+        ):
+            return "fuse_classical" if name == "fuse" else name
+        return "sam"
+
+    @staticmethod
+    def _model_tag(effective: str) -> str:
+        """Honest model_used fragment for the classifier that actually ran."""
+        if effective in (
+            "sff",
+            "continuum_removal",
+            "mtmf",
+            "mnf_mtmf",
+            "fuse_classical",
+        ):
+            return effective
+        if effective == "mnf_sam":
+            return "mnf_sam_nnls"
+        return f"{effective}_nnls"
+
+    @staticmethod
+    def _classify_fuse_classical(
+        cube: NDArray[np.floating[Any]],
+        refs: NDArray[np.floating[Any]],
+        wavelengths: NDArray[np.floating[Any]],
+        mineral_names: list[str],
+        valid_mask: NDArray[np.bool_],
+        options: MapperOptions,
+        mineral_count: int,
+    ) -> tuple[NDArray[np.uint8], NDArray[np.float32], NDArray[np.float32]]:
+        """Soft fusion of MTMF + CR-region SAM + MNF-SAM (CPU classical ensemble).
+
+        Default weights (from Cuprite grid search maximizing labeled OA):
+        0.7 * MTMF + 0.2 * CR-SAM + 0.1 * MNF-SAM, then argmax over minerals.
+        Always assigns on valid pixels (no unknown gate) for multi-class OA.
+        """
+        h, w, _b = cube.shape
+        cube_f = np.asarray(cube, dtype=np.float32)
+        refs_f = np.asarray(refs, dtype=np.float32)
+        k = mineral_count
+
+        # --- MTMF soft scores ---
+        mf, _infeas = mtmf(cube_f, refs_f, valid_mask=valid_mask)
+        # Scale MF by 99th percentile of valid pixels for [0,1]-ish scores
+        valid_mf = mf[valid_mask]
+        scale = float(np.percentile(valid_mf, 99)) if valid_mf.size else 1.0
+        scale = max(scale, 1e-6)
+        mf_soft = np.clip(mf / scale, 0.0, 1.0).astype(np.float32)
+
+        # --- CR-SAM soft scores (always-assign) ---
+        cr_cls, cr_conf = classify_cube_cr_sam(
+            cube_f,
+            refs_f,
+            wavelengths,
+            mineral_names,
+            valid_mask,
+            tile_size=options.tile_size,
+            sam_threshold_deg=90.0,
+            min_strength=0.0,
+        )
+        cr_soft = np.zeros((h, w, k), dtype=np.float32)
+        for j in range(k):
+            m = cr_cls == j
+            cr_soft[..., j] = np.where(m, cr_conf, 0.0)
+
+        # --- MNF-SAM soft scores ---
+        n_comp = max(1, int(options.n_mnf_components))
+        mnf_cube, tmat = mnf_transform(cube_f, valid_mask, n_components=n_comp)
+        mu = mnf_data_mean(cube_f, valid_mask)
+        refs_mnf = apply_mnf(refs_f, tmat, data_mean=mu)
+        mnf_soft = np.zeros((h, w, k), dtype=np.float32)
+        for row0, row1, col0, col1 in iter_tiles(h, w, options.tile_size):
+            tile = mnf_cube[row0:row1, col0:col1, :]
+            tile_valid = valid_mask[row0:row1, col0:col1]
+            flat = tile.reshape(-1, tile.shape[2])
+            flat_valid = tile_valid.reshape(-1)
+            if not np.any(flat_valid):
+                continue
+            angles = compute_sam_angles(flat[flat_valid], refs_mnf)
+            strength = angles_to_strength(angles)
+            out = np.zeros((flat_valid.shape[0], k), dtype=np.float32)
+            out[np.where(flat_valid)[0]] = strength
+            mnf_soft[row0:row1, col0:col1, :] = out.reshape(
+                row1 - row0, col1 - col0, k
+            )
+
+        # Default fusion weights (Cuprite-tuned); could be options later
+        w_mt, w_cr, w_mn = 0.7, 0.2, 0.1
+        fused = w_mt * mf_soft + w_cr * cr_soft + w_mn * mnf_soft
+        class_map = np.argmax(fused, axis=2).astype(np.uint8)
+        confidence_map = np.max(fused, axis=2).astype(np.float32)
+        class_map[~valid_mask] = UNKNOWN_CLASS
+        confidence_map[~valid_mask] = 0.0
+
+        # Soft abundances from fused scores
+        totals = np.sum(np.maximum(fused, 0.0), axis=2, keepdims=True)
+        totals = np.maximum(totals, 1e-10)
+        abundance_cube = (np.maximum(fused, 0.0) / totals).astype(np.float32)
+        abundance_cube[~valid_mask] = 0.0
+        return class_map, confidence_map, abundance_cube
+
     def _load_library(self, options: MapperOptions, wavelengths: list[float]) -> SpectralLibrary:
         if options.spectral_library is not None:
             library = load_csv_library(options.spectral_library, options.minerals)
             return resample_library(library, wavelengths)
 
-        if any(m.endswith("_demo") for m in options.minerals):
+        demo_names = [m for m in options.minerals if m.endswith("_demo")]
+        real_names = [m for m in options.minerals if not m.endswith("_demo")]
+        if demo_names and real_names:
+            raise ValueError(
+                "Cannot mix demo minerals (*_demo) with real mineral names in one run. "
+                "Use only demo names for plumbing tests, or provide --library / spectral_library "
+                "for real minerals."
+            )
+        if demo_names and not real_names:
             library = load_demo_library(options.minerals)
             return resample_library(library, wavelengths)
 
-        try:
-            from .relab_fetcher import build_spectral_library as build_relab
-
-            target_wl = np.asarray(wavelengths, dtype=np.float32)
-            library = build_relab(options.minerals, target_wl)
-            if library.spectra.shape[0] > 0:
-                return library
-        except Exception:
-            pass
-
+        # Real mineral names: require explicit CSV. Do not silently use demo curves or
+        # cache files that may be synthetic Gaussians labeled as RELAB.
         raise ValueError(
-            "Authoritative spectra are unavailable. "
-            "Your mineral names do not include '_demo' suffixes, so synthetic demo spectra "
-            "cannot be used in their place. "
-            "Provide a user CSV via --library or fetch an authoritative RELAB corpus "
-            "via `open-ore-mapper fetch-library`."
+            "Authoritative spectra unavailable for real mineral names without a library CSV. "
+            "Provide spectral_library / --library pointing at dense VNIR–SWIR spectra "
+            "(e.g. benchmarks/demo_fixture/library.csv or a USGS-derived CSV). "
+            "Toy *_demo minerals are only for software plumbing tests."
         )
 
     def quality_file(

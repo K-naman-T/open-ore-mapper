@@ -1,0 +1,13 @@
+{
+  "class_names": [
+    "kaolinite",
+    "alunite",
+    "calcite",
+    "chalcedony",
+    "muscovite",
+    "montmorillonite",
+    "hematite",
+    "goethite"
+  ],
+  "ignore_index": 255
+}

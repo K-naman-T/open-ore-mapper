@@ -1,0 +1,22 @@
+{
+  "sensor": "manual",
+  "minerals": [
+    "kaolinite",
+    "alunite",
+    "calcite",
+    "chalcedony",
+    "muscovite",
+    "montmorillonite",
+    "hematite",
+    "goethite"
+  ],
+  "classifier": "fuse_classical",
+  "min_confidence": 0.0,
+  "sam_threshold_deg": 90.0,
+  "tile_size": 128,
+  "normalization": "l2",
+  "min_band_valid_fraction": 0.3,
+  "mf_threshold": 0.0,
+  "infeas_threshold": 50.0,
+  "n_mnf_components": 20
+}

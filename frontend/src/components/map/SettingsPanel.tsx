@@ -13,7 +13,7 @@ const ALL_MINERALS = [
 
 const SENSORS = ["EMIT", "Cubert", "Custom"]
 
-const CLASSIFIERS = ["Continuum Removal", "SAM"]
+const CLASSIFIERS = ["SAM", "SFF"]
 
 interface Props {
   open: boolean
@@ -34,6 +34,7 @@ interface Props {
   onFileChange: (v: File | null) => void
   bbox: Bbox | null
   onMapMinerals: () => void
+  onTryBenchmark?: () => void
   processing: boolean
   canMap: boolean
   dataWt?: string
@@ -58,6 +59,7 @@ export function SettingsPanel({
   onFileChange,
   bbox,
   onMapMinerals,
+  onTryBenchmark,
   processing,
   canMap,
   dataWt,
@@ -101,7 +103,7 @@ export function SettingsPanel({
           {/* Sensor */}
           <section>
             <label className="text-xs font-medium text-text-secondary mb-2 block">Sensor</label>
-            <div className="flex gap-0.5">
+            <div className="flex gap-1">
               {SENSORS.map((s) => (
                 <button
                   key={s}
@@ -121,7 +123,7 @@ export function SettingsPanel({
           {/* Classifier */}
           <section>
             <label className="text-xs font-medium text-text-secondary mb-2 block">Classifier</label>
-            <div className="flex gap-0.5">
+            <div className="flex gap-1">
               {CLASSIFIERS.map((c) => (
                 <button
                   key={c}
@@ -141,7 +143,7 @@ export function SettingsPanel({
           {/* Minerals */}
           <section>
             <label className="text-xs font-medium text-text-secondary mb-2 block">Minerals</label>
-            <div className="flex flex-wrap gap-[3px]">
+            <div className="flex flex-wrap gap-1.5">
               {ALL_MINERALS.map((m, i) => (
                 <button
                   key={m}
@@ -177,24 +179,21 @@ export function SettingsPanel({
             />
           </section>
 
-          {/* Toggles */}
+          {/* Toggles — disabled until pipeline wires them (honesty) */}
           <section className="space-y-2">
-            <label className="flex items-center justify-between cursor-pointer group">
-              <span className="text-xs text-text-secondary group-hover:text-text-primary transition-colors">ACE Detection</span>
-              <div
-                onClick={() => onAceChange(!ace)}
-                className={`w-9 h-5 rounded-full transition-colors duration-200 relative ${ace ? "bg-accent" : "bg-bg-3"}`}
-              >
-                <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform duration-200 ${ace ? "translate-x-[18px]" : "translate-x-0.5"}`} />
+            <p className="text-[10px] text-text-tertiary leading-relaxed">
+              ACE and vegetation mask are not wired in the engine; toggles stay off.
+            </p>
+            <label className="flex items-center justify-between opacity-50 cursor-not-allowed">
+              <span className="text-xs text-text-secondary">ACE Detection</span>
+              <div className="w-9 h-5 rounded-full bg-bg-3 relative">
+                <div className="absolute top-0.5 w-4 h-4 rounded-full bg-white translate-x-0.5" />
               </div>
             </label>
-            <label className="flex items-center justify-between cursor-pointer group">
-              <span className="text-xs text-text-secondary group-hover:text-text-primary transition-colors">Vegetation Mask</span>
-              <div
-                onClick={() => onVegMaskChange(!vegMask)}
-                className={`w-9 h-5 rounded-full transition-colors duration-200 relative ${vegMask ? "bg-accent" : "bg-bg-3"}`}
-              >
-                <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform duration-200 ${vegMask ? "translate-x-[18px]" : "translate-x-0.5"}`} />
+            <label className="flex items-center justify-between opacity-50 cursor-not-allowed">
+              <span className="text-xs text-text-secondary">Vegetation Mask</span>
+              <div className="w-9 h-5 rounded-full bg-bg-3 relative">
+                <div className="absolute top-0.5 w-4 h-4 rounded-full bg-white translate-x-0.5" />
               </div>
             </label>
           </section>
@@ -263,7 +262,19 @@ export function SettingsPanel({
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-4 border-t border-border-subtle shrink-0">
+        <div className="px-5 py-4 border-t border-border-subtle shrink-0 space-y-2">
+          {onTryBenchmark && (
+            <button
+              type="button"
+              onClick={onTryBenchmark}
+              disabled={processing}
+              className="w-full h-10 bg-accent/15 text-accent border border-accent/25 text-sm font-medium rounded-xl
+                hover:bg-accent/25 active:scale-[0.98] transition-all duration-150
+                disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {processing ? "Processing…" : "Try demo scorecard"}
+            </button>
+          )}
           <button
             data-wt={dataWt}
             onClick={onMapMinerals}

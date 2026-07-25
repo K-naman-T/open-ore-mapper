@@ -53,6 +53,14 @@ outputs/
 *.tiff
 !examples/*.tif
 !frontend/e2e/fixtures/*.tif
+# Benchmark labels only (never multi-hundred-MB cubes / raw AVIRIS)
+!benchmarks/**/reference.tif
+!benchmarks/**/reference.tiff
+benchmarks/**/raw/
+benchmarks/**/scene.tif
+benchmarks/**/scene.tiff
+# Secrets
+api_keys.md
 
 # Allow source fixture databases (but not runtime *.db)
 !examples/*.db

@@ -62,7 +62,8 @@ def health() -> dict[str, str]:
 
 @app.get("/v1/minerals")
 def minerals() -> dict[str, list[str]]:
-    return {"minerals": list(DEFAULT_DEMO_MINERALS)}
+    """Curated real mineral names for demos. Demo-only names require explicit *_demo requests."""
+    return {"minerals": list(DEFAULT_REAL_MINERALS)}
 
 
 async def _read_upload(file: UploadFile) -> bytes:
@@ -96,6 +97,40 @@ async def qc_raster(
         return mapper.to_quality_response(report)
     except ValueError as exc:
         return _bad_request(str(exc))
+
+
+@app.post("/v1/benchmarks/run", response_model=None)
+async def run_benchmark_api(body: dict[str, Any] = Body(...)) -> dict[str, Any] | JSONResponse:
+    """Run a local benchmark package (predict + evaluate). Body: {benchmark, output_dir?}."""
+    try:
+        from .benchmark import run_benchmark
+
+        bench = body.get("benchmark") or body.get("benchmark_dir")
+        if not bench or not isinstance(bench, str):
+            return _bad_request("benchmark must be a path string to a benchmark package")
+        out = body.get("output_dir") or f"outputs/benchmark-{Path(bench).name}"
+        summary = run_benchmark(bench, out)
+        # Attach small data-URLs for UI if PNGs exist
+        out_path = Path(out)
+        for key, name in (
+            ("diff_image", "diff.png"),
+            ("our_image", "our_class.png"),
+            ("reference_image", "reference.png"),
+        ):
+            p = out_path / name
+            if p.is_file():
+                import base64
+
+                summary[key] = "data:image/png;base64," + base64.b64encode(p.read_bytes()).decode()
+        summary["output_dir"] = str(out_path)
+        return summary
+    except FileNotFoundError as exc:
+        return _bad_request(str(exc))
+    except ValueError as exc:
+        return _bad_request(str(exc))
+    except Exception as exc:
+        logger.exception("benchmark failed")
+        return JSONResponse(status_code=500, content={"error": str(exc)})
 
 
 @app.post("/v1/predict", response_model=None)
@@ -424,8 +459,12 @@ def _parse_options(options_text: str) -> MapperOptions:
         normalization=str(raw.get("normalization", "l2")),
         excluded_band_indices=excluded,
         min_band_valid_fraction=float(raw.get("min_band_valid_fraction", 0.5)),
-        classifier=str(raw.get("classifier", "continuum_removal")),
+        classifier=str(raw.get("classifier", "sam")),
         use_ace=bool(raw.get("use_ace", False)),
+        use_mtmf=bool(raw.get("use_mtmf", False)),
+        mf_threshold=float(raw.get("mf_threshold", 0.5)),
+        infeas_threshold=float(raw.get("infeas_threshold", 10.0)),
+        n_mnf_components=int(raw.get("n_mnf_components", 20)),
         unmixing=str(raw.get("unmixing", "auto")),
         vegetation_mask=bool(raw.get("vegetation_mask", False)),
         ndvi_threshold=float(raw.get("ndvi_threshold", 0.3)),

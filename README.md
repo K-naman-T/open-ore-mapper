@@ -1,176 +1,218 @@
 # Open Ore Mapper
 
-**Work-in-progress.** Local-first tool for producing candidate surface mineral signature maps from hyperspectral raster cubes, using public spectral matching methods.
+**Local-first candidate surface mineral maps** from hyperspectral cubes — classical spectral matching first, honest scorecards, no “ore proof.”
 
-This tool identifies spectral *candidates* that warrant field validation. It does **not** detect buried ore bodies, confirm mineral presence, or replace petrology/geochemistry.
+This tool produces **spectral candidates** that warrant field validation. It does **not** detect buried ore, confirm mineral presence, or replace petrology / geochemistry.
 
 ---
 
-## Working Today
+## Cuprite result (product path)
+
+**Method:** unsupervised classical `fuse_classical` (MTMF + continuum-removal SAM + MNF-SAM).  
+**Reference:** Tetracorder 4.4 mineral maps (algorithmic labels, not field XRD).  
+**Library:** scene endmembers from pure Tetracorder pixels (**semi-dependent** — map-to-map agreement, not independent discovery).
+
+| Metric | Full-scene (diagnostic) | Spatial multi-seed (prefer externally) |
+|--------|-------------------------|----------------------------------------|
+| Agreement OA | **~0.72** | **~0.66 ± 0.09** |
+| Kappa | ~0.66 | ~0.57 |
+
+**Not product accuracy:** supervised RF / HistGB multi-seed (~0.79–0.82) are research **Track C** (Tetracorder imitation when labels exist). See [`docs/BEST_NUMBERS.md`](docs/BEST_NUMBERS.md).
+
+### Reference vs ours vs diff
+
+![Cuprite: Tetracorder reference | fuse_classical | agreement diff](docs/assets/cuprite-gt-vs-ours.png)
+
+*Left: Tetracorder reference map · Center: our `fuse_classical` map · Right: green = agree, red = disagree. OA ≈ 0.72 full-scene is **map-to-map agreement**, not mineral truth.*
+
+| Ours | Reference | Diff |
+|------|-----------|------|
+| ![Ours](docs/assets/cuprite-ours-fuse.png) | ![Reference](docs/assets/cuprite-reference-tetracorder.png) | ![Diff](docs/assets/cuprite-diff.png) |
+
+Reproduce:
+
+```bash
+.venv/bin/python scripts/run_cuprite_real_validation.py
+# → outputs/cuprite-real-eval/comparison_panel.png
+# → outputs/cuprite-real-eval/metrics.json  (metric_framing: map_to_map_agreement)
+```
+
+---
+
+## Working today
 
 | Capability | Status |
 |---|---|
-| CLI (`predict`, `qc-raster`, `list-scenes`, `download-scene`, `fetch-library`) | Stable |
-| FastAPI service (upload, predict, QC, tileserver) | Stable |
-| SAM + NNLS classification pipeline | Default path |
-| Raster quality control (band-level, pixel-level) | Stable |
-| User-provided spectral library CSV | Stable |
-| Public scene catalog (Cuprite, Salinas-A, Indian Pines) | Stable |
-| Synthetic demo spectra (6 minerals) | Bundled for testing |
-| React/TypeScript frontend (map tiles, upload UI) | In development |
-| Docker Compose (backend only) | Development use |
+| **Cuprite real validation** (`fuse_classical` default) | **Shipped** — panel + metrics + honest framing |
+| Classical stack: SAM, CR-SAM, MTMF, MNF-SAM, **fuse_classical** | Wired in `OreMapper` / validation script |
+| CLI `predict`, `qc-raster`, public scenes | Stable |
+| FastAPI upload / predict / QC / tiles | Stable |
+| Fail-closed spectral library matching | Stable |
+| Spatial multi-seed research eval | Shipped (`scripts/spatial_split_eval.py`) |
+| React frontend (globe + scorecard) | Usable; scorecard = **map-to-map agreement** |
+| Supervised RF / boosting / 1D-CNN research | Optional (`.[ml]`); **not** product default |
+| EMIT bbox pipeline | Experimental (Earthdata creds + `[emit]`) |
 
-## Experimental / Not Yet Wired
+### Still incomplete / experimental
 
-| Feature | Module exists? | Wired in pipeline? | Notes |
-|---|---|---|---|
-| SFF classifier (`classifier="sff"`) | `sff.py` + `continuum_removal.py` | Conditional | Pixel-level loop, slow on large cubes |
-| Default `classifier="continuum_removal"` | `continuum_removal.py` | **Not gated** | Schema default is misleading — `_classify_core` ignores it; SAM+NNLS runs regardless |
-| ACE sub-pixel detection (`use_ace=True`) | `ace.py` | No | Schema field defined; never invoked |
-| MTMF (`use_mtmf=True`) | `mtmf.py` | No | Not invoked; `use_mtmf` defaults to `False` and is inert |
-| SUnSAL sparse unmixing (`unmixing:`) | `sunsal.py` | No | `should_use_sunsal()` never checked |
-| Vegetation masking (`vegetation_mask=True`) | `vegetation.py` | No | Schema field defined; never applied |
-| Topographic correction | Planned | No | Schema fields defined (`topographic_correct`, `dem_type` etc.) |
-| RELAB PDS fetcher (`relab_fetcher.py`) | Yes — index + download + resample | No — CLI `fetch-library` exists but PDS directory layout changed | Inventory discovery broken; PDS4-corpus workflow tracked in SPECTRAL_LIBRARIES_RESEARCH.md |
-
-**Bottom line:** SAM + NNLS works end-to-end and is the only pipeline that affects final output. All other classifier/feature options at `MapperOptions` are partially implemented placeholders.
-
-## Architecture
-
-```
-CLI / API → load_cube (.tif/.h5/.mat)
-          → QC (band filter, valid pixels)
-          → load/resample spectral library
-          → normalize (l2 / percentile / none)
-          → tile loop: SAM angles + NNLS abundances → fuse (0.6×SAM + 0.4×NNLS)
-          → threshold → render PNG + JSON statistics
-```
-
-Backend: Python 3.10+, FastAPI, NumPy/SciPy, tifffile, h5py.
-Frontend: React 19, TypeScript, Vite, Tailwind 4, MapLibre GL.
-
-## Quickstart
-
-### Backend
-
-```bash
-pip install -e '.[dev,api]'
-open-ore-mapper predict examples/demo_scene.tif --sensor cubert_ultris_s5 --minerals hematite_demo --output-dir outputs/demo
-```
-
-API:
-
-```bash
-uvicorn open_ore_mapper.api:app --host 127.0.0.1 --port 8000
-# Open http://127.0.0.1:8000/
-```
-
-### Frontend
-
-```bash
-cd frontend && npm install && npm run dev
-# Open http://localhost:5173/ (proxies API to :8000 per vite.config.ts)
-```
-
-### Docker (backend only)
-
-```bash
-make dev   # docker compose up --build -d  (starts backend on port 8000)
-make build # docker compose build
-```
-
-### Tests
-
-```bash
-make test              # pytest -v
-make lint              # ruff check (separate: make typecheck for mypy)
-cd frontend && npm run test:e2e   # Playwright E2E (UI-state only; no backend end-to-end processing)
-```
-
-## Supported File Types
-
-| Format | Details |
+| Item | Notes |
 |---|---|
-| `.tif` / `.tiff` | GeoTIFF, any band layout (auto-detected HWC) |
-| `.h5` / `.hdf5` / `.nc` | HDF5/NetCDF; reads embedded `/wavelengths` and `sensor_band_parameters/good_wavelengths` |
-| `.mat` | MATLAB v5+; picks first 3D floating array or known keys (`cube`, `data`, `hsi`, `SalinasA_corrected`, etc.) |
-
-## EMIT Bounding-Box Pipeline (Experimental)
-
-`POST /v1/predict/bbox` accepts a WGS84 bbox, searches NASA Earthdata for EMIT L2A Reflectance granules, downloads + orthorectifies + classifies the best candidate.
-
-**Known limitations:**
-
-| Limitation | Detail |
-|---|---|
-| In-process execution | Background task in the uvicorn process via FastAPI/Starlette BackgroundTasks; no separate worker queue. Synchronous callables are offloaded to a thread pool so they do not directly block the event loop, but remain tied to the API process lifetime and consume process/thread/memory resources. |
-| First-tile QC only | QC analyzes the first orthorectified tile, not the full scene. |
-| Full-area processing | Orthorectification processes all tiles individually; memory use scales with scene size. |
-| Georeferencing | `processed_bounds` reports pixel extent, not WGS84. Exact georeferencing from GLT metadata is not yet exposed. |
-| Authentication | Requires Earthdata credentials via `EARTHDATA_USERNAME`/`EARTHDATA_PASSWORD` env vars. |
-| Dependencies | Requires `[emit]` extras: `pip install -e '.[emit]'` (xarray, netcdf4, earthaccess). The Docker image includes `[api,emit]` so the bbox endpoint is available. |
-
-## Spectral Library Reality
-
-**Bundled demo library** (`examples/demo_library.csv`): synthetic analytic curves for software testing only. **Not safe for scientific use.**
-
-**RELAB PDS fetcher** (`open-ore-mapper fetch-library`): experimental inventory-discovery script. The PDS directory layout changed post-publication and the hardcoded URL traversal is likely broken. Not wired into any pipeline path. Cached locally at `~/.cache/open-ore-mapper/relab/`.
-
-**Authoritative corpus underway:** SPECTRAL_LIBRARIES_RESEARCH.md documents a verified PDS4-spectra bundling workflow. No authoritative library is yet bundled in-tree.
-
-Always provide a user spectral library via `--library` when doing real work.
-
-### Spectral Library CSV Format
-
-```csv
-name,wavelength,reflectance
-hematite_demo,450,0.42
-hematite_demo,550,0.30
-goethite_demo,450,0.38
-goethite_demo,550,0.44
-```
-
-Required columns: `name`, `wavelength`, `reflectance`. Wavelengths must be strictly increasing per mineral. Selected minerals must share the same wavelength grid. All reflectance values must be finite.
-
-## CLI Commands
-
-| Command | Purpose |
-|---|---|
-| `open-ore-mapper predict <input>` | Run SAM+NNLS classification |
-| `open-ore-mapper qc-raster <input>` | Raster quality control report |
-| `open-ore-mapper list-scenes` | List downloadable public HSI scenes |
-| `open-ore-mapper download-scene <id>` | Download a public scene (.mat) |
-| `open-ore-mapper fetch-library` | Fetch RELAB spectral library index/spectra |
-
-## API Endpoints
-
-| Method | Path | Purpose |
-|---|---|---|
-| GET | `/health` | Liveness check |
-| GET | `/v1/minerals` | List available demo minerals |
-| POST | `/v1/predict` | Upload file → classification |
-| POST | `/v1/qc/raster` | Upload file → QC report |
-| POST | `/v1/predict/bbox` | Bbox → EMIT search → classify |
-| GET | `/v1/maps/{uuid}` | Fetch completed map result |
-| GET | `/v1/maps/{uuid}/tiles/{z}/{x}/{y}.png` | Slippy map tiles |
-| GET | `/v1/jobs/{job_id}` | Bbox job status |
-
-## Screenshots
-
-![Open Ore Mapper development UI — globe basemap with open Settings panel showing sensor, classifier, minerals, and confidence controls](docs/assets/open-ore-mapper-ui.png)
-
-*Development UI showing the MapLibre GL globe with the Settings panel open. The globe displays a dark CartoDB basemap centered on the Atlantic. The Settings panel exposes sensor selection (EMIT, Cubert, Custom), classifier choice (Continuum Removal, SAM), mineral toggles, confidence threshold slider, ACE/vegetation-mask switches, file upload, and the Map Minerals action button.*
-
-## Roadmap
-
-See [ROADMAP.md](ROADMAP.md).
-
-## License & Citation
-
-Apache 2.0. See [LICENSE](LICENSE) and [PROVENANCE.md](PROVENANCE.md).
-
-Spectral libraries cited in [SPECTRAL_LIBRARIES_RESEARCH.md](SPECTRAL_LIBRARIES_RESEARCH.md). Public hyperspectral scenes provided by the Grupo de Inteligencia Computacional, Universidad del País Vasco (EHU).
+| Schema/API default classifier still often `sam` | Cuprite **script** defaults to `fuse_classical` |
+| ACE, vegetation mask, SUnSAL toggles | Not fully wired in all UI paths |
+| Authoritative bundled USGS library | Prefer user CSV / scene endmembers for now |
+| Independent library Track A multi-seed | Deferred integrity track |
+| Full EMIT Path B product polish | After classical Path A is boringly solid |
 
 ---
 
-**This is a work-in-progress open-source project. All outputs are spectral candidates requiring field validation.**
+## Product rule (incremental base)
+
+```text
+Unlabeled scene  →  classical library / hourglass matching  →  map + confidence
+Labeled ROIs     →  optional supervised research (never the default demo hero)
+```
+
+We build **incrementally on the classical unlabeled path**. Supervised OA is research-only.
+
+Docs:
+
+| Doc | Use |
+|-----|-----|
+| [`README.md`](README.md) | Living product plan |
+| [`docs/BEST_NUMBERS.md`](docs/BEST_NUMBERS.md) | Scoreboard Tracks A/B/C |
+| [`docs/research_scrapes/ADVERSARIAL_CONSENSUS.md`](docs/research_scrapes/ADVERSARIAL_CONSENSUS.md) | Binding claim language |
+| [`docs/research_scrapes/SUPERVISOR_GO_NOGO.md`](docs/research_scrapes/SUPERVISOR_GO_NOGO.md) | GO decision |
+| [`docs/DEMO_READINESS_PLAN.md`](docs/DEMO_READINESS_PLAN.md) | Demo checklist |
+
+---
+
+## Architecture (product path)
+
+```text
+Cube + wavelengths + library CSV
+  → QC / band filter
+  → classical match (fuse_classical default on Cuprite validation)
+  → class map + confidence
+  → optional: evaluate vs reference → agreement OA / κ / panel
+```
+
+Backend: Python 3.10+, FastAPI, NumPy/SciPy, tifffile.  
+Frontend: React 19, TypeScript, Vite, Tailwind, MapLibre GL.
+
+---
+
+## Quickstart
+
+### 1) Quickstart (Cuprite benchmark) — Cuprite (recommended)
+
+Requires `benchmarks/cuprite_real/` (scene + Tetracorder reference).
+
+```bash
+python -m venv .venv && source .venv/bin/activate   # or use existing .venv
+pip install -e '.[dev,api]'   # optional: '.[ml]' for research baselines only
+
+.venv/bin/python scripts/run_cuprite_real_validation.py
+```
+
+| Artifact | Path |
+|----------|------|
+| Panel | `outputs/cuprite-real-eval/comparison_panel.png` |
+| Metrics | `outputs/cuprite-real-eval/metrics.json` |
+| Report | `outputs/cuprite-real-eval/report.md` |
+
+### 2) CLI on any cube
+
+```bash
+open-ore-mapper predict path/to/cube.tif \
+  --sensor manual \
+  --library path/to/library.csv \
+  --minerals hematite,goethite,kaolinite \
+  --output-dir outputs/run
+```
+
+### 3) API + UI
+
+```bash
+uvicorn open_ore_mapper.api:app --host 127.0.0.1 --port 8000
+# http://127.0.0.1:8000/
+
+cd frontend && npm install && npm run dev
+# http://localhost:5173/
+```
+
+### 4) Docker (backend)
+
+```bash
+make dev    # docker compose up --build -d
+make test   # pytest
+```
+
+---
+
+## Development UI
+
+![Open Ore Mapper UI](docs/assets/open-ore-mapper-ui.png)
+
+*MapLibre shell + settings. Scorecard wording is **map-to-map agreement** (not field truth). Some advanced toggles remain experimental.*
+
+---
+
+## How to read numbers
+
+| Number | Meaning |
+|--------|---------|
+| **~0.72 full-scene fuse** | Track B diagnostic — agreement with Tetracorder using pure-GT endmembers |
+| **~0.66 multi-seed fuse** | Preferred **external classical** bar (spatial hold-out) |
+| **~0.79–0.82 supervised** | Track C research only — needs train labels; not the product default |
+
+Always: **candidates only · agreement ≠ ore proof.**
+
+---
+
+## Spectral libraries
+
+| Source | Role |
+|--------|------|
+| User CSV (`name,wavelength,reflectance`) | Production path |
+| Cuprite scene endmembers (validation) | Semi-dependent benchmark |
+| `examples/demo_library.csv` | Software tests only — **not science** |
+| USGS / RELAB / ECOSTRESS | Research / fetch workflows — see `SPECTRAL_LIBRARIES_RESEARCH.md` |
+
+---
+
+## CLI & API (summary)
+
+| CLI | Purpose |
+|-----|---------|
+| `open-ore-mapper predict` | Classify a cube |
+| `open-ore-mapper qc-raster` | QC report |
+| `open-ore-mapper list-scenes` / `download-scene` | Public HSI catalog |
+| `open-ore-mapper fetch-library` | RELAB helper (experimental) |
+
+| API | Purpose |
+|-----|---------|
+| `POST /v1/predict` | Upload → map |
+| `POST /v1/qc/raster` | QC |
+| `POST /v1/predict/bbox` | EMIT bbox (experimental) |
+| `GET /v1/maps/{uuid}` | Result + optional scorecard |
+
+---
+
+## Tests
+
+```bash
+make test
+.venv/bin/python -m pytest tests/test_evaluate.py tests/test_cuprite_demo_path.py -q
+```
+
+---
+
+## License
+
+Apache 2.0 — [LICENSE](LICENSE), [PROVENANCE.md](PROVENANCE.md).
+
+Public scenes / libraries retain their upstream licenses and citation requirements.
+
+---
+
+**Work in progress. All outputs are spectral candidates requiring field validation.**

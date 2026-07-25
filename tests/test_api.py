@@ -6,7 +6,7 @@ import tifffile
 from fastapi.testclient import TestClient
 
 from open_ore_mapper.api import app
-from open_ore_mapper.schemas import DEFAULT_DEMO_MINERALS
+from open_ore_mapper.schemas import DEFAULT_REAL_MINERALS
 
 
 client = TestClient(app)
@@ -21,7 +21,7 @@ def test_health_returns_healthy() -> None:
 def test_minerals_returns_default_demo_minerals() -> None:
     response = client.get("/v1/minerals")
     assert response.status_code == 200
-    assert response.json() == {"minerals": DEFAULT_DEMO_MINERALS}
+    assert response.json() == {"minerals": list(DEFAULT_REAL_MINERALS)}
 
 
 def test_predict_accepts_synthetic_tiff() -> None:
@@ -325,6 +325,45 @@ def test_api_rejects_server_side_spectral_library_path() -> None:
 
     assert response.status_code == 400
     assert "not supported" in response.json()["error"]["message"]
+
+
+def test_api_real_minerals_without_library_fail_closed() -> None:
+    """Real mineral names must not silently use demo/Gaussian spectra."""
+    response = client.post(
+        "/v1/predict",
+        files={"file": ("synthetic.tif", _synthetic_tiff_bytes(), "image/tiff")},
+        data={
+            "options": json.dumps(
+                {
+                    "minerals": ["hematite", "goethite"],
+                    "min_confidence": 0.0,
+                    "sam_threshold_deg": 180.0,
+                }
+            )
+        },
+    )
+    assert response.status_code == 400
+    message = response.json()["error"]["message"].lower()
+    assert "library" in message or "authoritative" in message or "spectra" in message
+
+
+def test_api_benchmark_demo_fixture_returns_scorecard(tmp_path) -> None:
+    """Shipped demo_fixture path via POST /v1/benchmarks/run."""
+    out = tmp_path / "api-bench-out"
+    response = client.post(
+        "/v1/benchmarks/run",
+        json={"benchmark": "benchmarks/demo_fixture", "output_dir": str(out)},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["overall_accuracy"] == 1.0
+    assert "kappa" in body
+    assert (out / "metrics.json").is_file()
+    assert (out / "diff.png").is_file()
+    assert (out / "our_class.png").is_file()
+    assert (out / "reference.png").is_file()
+    assert body.get("our_image", "").startswith("data:image/png")
+    assert "hematite" in body.get("class_names", [])
 
 
 def _synthetic_tiff_bytes() -> bytes:
