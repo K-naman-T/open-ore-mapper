@@ -10,8 +10,10 @@ import numpy as np
 from open_ore_mapper.evaluate import (
     UNKNOWN_CLASS,
     evaluate_maps,
+    overlay_class_on_rgb,
     rasterize_rois,
     render_diff_rgb,
+    true_color_rgb,
     write_evaluation_artifacts,
 )
 
@@ -101,6 +103,37 @@ def test_write_artifacts_map_agreement_framing(tmp_path: Path) -> None:
     assert metrics["provenance"]["classifier"] == "fuse_classical"
     assert metrics["provenance"]["metric_framing"] == "map_to_map_agreement"
     assert 0.0 < metrics["overall_accuracy"] < 1.0
+
+
+def test_true_color_rgb_shape_and_range() -> None:
+    rng = np.random.default_rng(0)
+    h, w, b = 20, 24, 30
+    # wavelengths in nm
+    wl = [400.0 + i * 10.0 for i in range(b)]
+    cube = rng.uniform(0.05, 0.6, size=(h, w, b)).astype(np.float32)
+    rgb = true_color_rgb(cube, wl)
+    assert rgb.shape == (h, w, 3)
+    assert rgb.dtype == np.uint8
+    assert rgb.max() > 0
+
+
+def test_true_color_accepts_micrometers() -> None:
+    rng = np.random.default_rng(1)
+    cube = rng.uniform(0.1, 0.5, size=(8, 8, 10)).astype(np.float32)
+    wl_um = [0.45 + i * 0.03 for i in range(10)]
+    rgb = true_color_rgb(cube, wl_um)
+    assert rgb.shape == (8, 8, 3)
+
+
+def test_overlay_class_on_rgb_preserves_unknown_terrain() -> None:
+    base = np.full((10, 10, 3), 120, dtype=np.uint8)
+    labels = np.full((10, 10), UNKNOWN_CLASS, dtype=np.uint8)
+    labels[2:5, 2:5] = 0
+    out = overlay_class_on_rgb(base, labels, n_classes=2, alpha=0.5, only_labeled=True)
+    # Unknown region stays base gray
+    assert np.all(out[0, 0] == 120)
+    # Class region moved toward palette red-ish (class 0)
+    assert int(out[3, 3, 0]) != 120 or int(out[3, 3, 1]) != 120
 
 
 def test_diff_colors_match_and_mismatch() -> None:

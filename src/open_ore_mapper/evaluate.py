@@ -180,15 +180,9 @@ def render_diff_rgb(
     return rgb
 
 
-def class_map_to_rgb(
-    class_map: NDArray[np.integer[Any]],
-    n_classes: int,
-    *,
-    ignore_index: int = UNKNOWN_CLASS,
-) -> NDArray[np.uint8]:
-    """Simple distinct palette for class maps (shared order for our vs reference)."""
-    # Deterministic palette (not requiring rendering.CLASS_COLORS import cycle)
-    palette = np.array(
+def class_map_palette() -> NDArray[np.uint8]:
+    """Shared deterministic class colors for solid maps and overlays."""
+    return np.array(
         [
             [177, 56, 36],
             [214, 117, 39],
@@ -205,6 +199,16 @@ def class_map_to_rgb(
         ],
         dtype=np.uint8,
     )
+
+
+def class_map_to_rgb(
+    class_map: NDArray[np.integer[Any]],
+    n_classes: int,
+    *,
+    ignore_index: int = UNKNOWN_CLASS,
+) -> NDArray[np.uint8]:
+    """Simple distinct palette for class maps (shared order for our vs reference)."""
+    palette = class_map_palette()
     unknown = np.array([20, 20, 20], dtype=np.uint8)
     rgb = np.zeros((*class_map.shape, 3), dtype=np.uint8)
     rgb[:] = unknown
@@ -212,6 +216,95 @@ def class_map_to_rgb(
         rgb[class_map == idx] = palette[idx % len(palette)]
     rgb[class_map == ignore_index] = unknown
     return rgb
+
+
+def _nearest_band_index(wavelengths: list[float] | NDArray[np.floating[Any]], target_nm: float) -> int:
+    wl = np.asarray(wavelengths, dtype=np.float64)
+    if wl.size == 0:
+        raise ValueError("wavelengths empty")
+    # Accept µm if all values look like < 20
+    if float(np.nanmax(wl)) < 20.0:
+        wl = wl * 1000.0
+    return int(np.argmin(np.abs(wl - float(target_nm))))
+
+
+def true_color_rgb(
+    cube: NDArray[np.floating[Any]],
+    wavelengths: list[float] | NDArray[np.floating[Any]],
+    *,
+    red_nm: float = 650.0,
+    green_nm: float = 550.0,
+    blue_nm: float = 470.0,
+    percentile_low: float = 2.0,
+    percentile_high: float = 98.0,
+) -> NDArray[np.uint8]:
+    """Build approximate true-color RGB from a hyperspectral cube (HWC).
+
+    Picks nearest bands to red/green/blue targets and applies independent
+    percentile stretches. Unknown/non-finite pixels go dark.
+    """
+    arr = np.asarray(cube, dtype=np.float32)
+    if arr.ndim != 3:
+        raise ValueError(f"cube must be HWC, got shape {arr.shape}")
+    ir = _nearest_band_index(wavelengths, red_nm)
+    ig = _nearest_band_index(wavelengths, green_nm)
+    ib = _nearest_band_index(wavelengths, blue_nm)
+    bands = [arr[:, :, ir], arr[:, :, ig], arr[:, :, ib]]
+    out = np.zeros((*arr.shape[:2], 3), dtype=np.uint8)
+    for c, band in enumerate(bands):
+        finite = np.isfinite(band)
+        if not finite.any():
+            continue
+        lo, hi = np.percentile(band[finite], [percentile_low, percentile_high])
+        if not np.isfinite(lo) or not np.isfinite(hi) or hi <= lo:
+            lo, hi = 0.0, 1.0
+        scaled = (band - lo) / (hi - lo)
+        scaled = np.clip(scaled, 0.0, 1.0)
+        ch = (scaled * 255.0).astype(np.uint8)
+        ch[~finite] = 0
+        out[:, :, c] = ch
+    return out
+
+
+def overlay_class_on_rgb(
+    base_rgb: NDArray[np.uint8],
+    class_map: NDArray[np.integer[Any]],
+    n_classes: int,
+    *,
+    alpha: float = 0.45,
+    ignore_index: int = UNKNOWN_CLASS,
+    only_labeled: bool = True,
+) -> NDArray[np.uint8]:
+    """Alpha-blend class colors onto a true-color (or any) RGB background.
+
+    When only_labeled is True, unknown/ignore pixels keep the pure base image
+    so terrain shows through where we did not assign a mineral.
+    """
+    base = np.asarray(base_rgb, dtype=np.float32)
+    labels = np.asarray(class_map)
+    if base.shape[:2] != labels.shape:
+        raise ValueError(
+            f"base_rgb spatial {base.shape[:2]} != class_map {labels.shape}"
+        )
+    if base.ndim != 3 or base.shape[2] != 3:
+        raise ValueError("base_rgb must be HxWx3")
+    a = float(np.clip(alpha, 0.0, 1.0))
+    palette = class_map_palette().astype(np.float32)
+    out = base.copy()
+    if only_labeled:
+        mask = labels != ignore_index
+    else:
+        mask = np.ones(labels.shape, dtype=bool)
+    for idx in range(n_classes):
+        m = mask & (labels == idx)
+        if not m.any():
+            continue
+        color = palette[idx % len(palette)]
+        for c in range(3):
+            out_c = out[:, :, c]
+            out_c[m] = (1.0 - a) * out_c[m] + a * color[c]
+            out[:, :, c] = out_c
+    return np.clip(out, 0, 255).astype(np.uint8)
 
 
 def write_png(path: Path, rgb: NDArray[np.uint8]) -> None:

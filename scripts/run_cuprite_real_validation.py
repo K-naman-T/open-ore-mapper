@@ -33,7 +33,9 @@ from open_ore_mapper.evaluate import (  # noqa: E402
     UNKNOWN_CLASS,
     class_map_to_rgb,
     evaluate_maps,
+    overlay_class_on_rgb,
     render_diff_rgb,
+    true_color_rgb,
     write_evaluation_artifacts,
     write_png,
 )
@@ -253,49 +255,60 @@ def make_comparison_panel(
     names: list[str],
     metrics: dict,
     out_path: Path,
+    *,
+    true_color: np.ndarray | None = None,
+    class_overlay: np.ndarray | None = None,
 ) -> None:
     n_cls = len(names)
     rgb_gt = class_map_to_rgb(ref, n_cls, ignore_index=UNKNOWN_CLASS)
     rgb_our = class_map_to_rgb(pred, n_cls, ignore_index=UNKNOWN_CLASS)
     rgb_diff = render_diff_rgb(pred, ref, ignore_index=UNKNOWN_CLASS)
 
-    # scale for display if huge
     def to_img(arr: np.ndarray) -> Image.Image:
         return Image.fromarray(arr, mode="RGB")
 
-    imgs = [to_img(rgb_gt), to_img(rgb_our), to_img(rgb_diff)]
-    # downscale if > 900 px wide each
-    max_w = 480
+    imgs: list[Image.Image] = []
+    labels: list[str] = []
+    if true_color is not None:
+        imgs.append(to_img(true_color))
+        labels.append("True-color (AVIRIS RGB)")
+    if class_overlay is not None:
+        imgs.append(to_img(class_overlay))
+        labels.append("Ours on true-color")
+    imgs.extend([to_img(rgb_gt), to_img(rgb_our), to_img(rgb_diff)])
+    engine = str(metrics.get("classifier") or metrics.get("model_used") or "fuse_classical")
+    labels.extend(
+        [
+            "Reference (Tetracorder)",
+            f"Ours solid ({engine})",
+            "Diff (green=agree)",
+        ]
+    )
+
+    max_w = 360 if len(imgs) >= 4 else 480
     scaled = []
     for im in imgs:
         if im.width > max_w:
             h = int(im.height * max_w / im.width)
             im = im.resize((max_w, h), Image.Resampling.NEAREST)
         scaled.append(im)
-    gap = 12
+    gap = 10
     label_h = 36
-    footer_h = 90
-    W = sum(im.width for im in scaled) + gap * 4
+    footer_h = 100
+    W = sum(im.width for im in scaled) + gap * (len(scaled) + 1)
     H = max(im.height for im in scaled) + label_h + footer_h + 20
     panel = Image.new("RGB", (W, H), (18, 18, 20))
     draw = ImageDraw.Draw(panel)
     try:
-        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 16)
-        font_sm = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 12)
-        font_lg = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 20)
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 14)
+        font_sm = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 11)
     except OSError:
-        font = font_sm = font_lg = ImageFont.load_default()
+        font = font_sm = ImageFont.load_default()
 
-    engine = str(metrics.get("classifier") or metrics.get("model_used") or "fuse_classical")
-    labels = [
-        "Reference (Tetracorder map)",
-        f"Ours ({engine})",
-        "Diff (green=agree)",
-    ]
     x = gap
     y0 = label_h
     for im, lab in zip(scaled, labels, strict=True):
-        draw.text((x, 10), lab, fill=(220, 220, 220), font=font)
+        draw.text((x, 8), lab, fill=(220, 220, 220), font=font)
         panel.paste(im, (x, y0))
         x += im.width + gap
 
@@ -305,13 +318,13 @@ def make_comparison_panel(
     footer = (
         f"Cuprite NV AVIRIS 1995  |  map-to-map agreement OA={oa:.3f}  kappa={kappa:.3f}  "
         f"labeled_px={nlab}\n"
-        f"Reference: Tetracorder 4.4 fd maps (not field XRD).  "
-        f"Library: scene endmembers from pure Tetracorder pixels (semi-dependent).  "
-        f"Engine: {engine} (unsupervised classical)\n"
-        f"NOT mineral truth / NOT ore proof. Prefer multi-seed fuse ~0.66 for external classical bar. "
+        f"True-color: cube RGB (~650/550/470 nm). Overlay: class colors alpha-blended on terrain.  "
+        f"Reference: Tetracorder 4.4 (not field XRD).  "
+        f"Library: scene pure-GT endmembers (semi-dependent).  Engine: {engine}\n"
+        f"NOT mineral truth / NOT ore proof. Prefer multi-seed fuse ~0.66 externally. "
         f"Diff: green=agree, red=disagree, orange=ref only, gray=unlabeled."
     )
-    draw.text((gap, H - footer_h + 8), footer, fill=(180, 180, 185), font=font_sm)
+    draw.text((gap, H - footer_h + 6), footer, fill=(180, 180, 185), font=font_sm)
     panel.save(out_path)
     print(f"Wrote comparison panel: {out_path}")
 
@@ -492,6 +505,21 @@ def main() -> int:
         if c.support > 0:
             print(f"    {c.name:16s} P={c.precision:.3f} R={c.recall:.3f} support={c.support}")
 
+    # True-color from cube + translucent class drape (same grid as class map)
+    print("Building true-color RGB + class overlay ...")
+    tc = true_color_rgb(cube_f, retained)
+    overlay = overlay_class_on_rgb(
+        tc,
+        class_map,
+        len(names),
+        alpha=0.48,
+        ignore_index=UNKNOWN_CLASS,
+        only_labeled=True,
+    )
+    write_png(OUT / "true_color.png", tc)
+    write_png(OUT / "class_overlay.png", overlay)
+    print(f"  wrote {OUT / 'true_color.png'} and {OUT / 'class_overlay.png'}")
+
     provenance = {
         "classifier": classifier,
         "model_used": result.model_used,
@@ -504,6 +532,8 @@ def main() -> int:
         "library": "scene endmembers = median spectra of high-purity Tetracorder pixels (semi-dependent)",
         "external_classical_bar": "fuse multi-seed spatial ~0.664 mean OA (Track B)",
         "full_scene_oa_note": "full-scene OA is diagnostic with all pure-GT endmembers",
+        "true_color": "AVIRIS approximate RGB (~650/550/470 nm), percentile stretch",
+        "class_overlay": "true_color + alpha class colors (unknown shows terrain)",
         "warnings": result.warnings,
     }
     write_evaluation_artifacts(
@@ -521,11 +551,18 @@ def main() -> int:
         if mpath.is_file()
         else metrics.to_dict()
     )
-    # Panel footer needs classifier name even if nested under provenance
     metrics_dict["classifier"] = classifier
     metrics_dict["model_used"] = result.model_used
 
-    make_comparison_panel(reference, class_map, names, metrics_dict, OUT / "comparison_panel.png")
+    make_comparison_panel(
+        reference,
+        class_map,
+        names,
+        metrics_dict,
+        OUT / "comparison_panel.png",
+        true_color=tc,
+        class_overlay=overlay,
+    )
 
     # also copy to docs/assets for visibility
     docs = ROOT / "docs" / "assets"

@@ -19,14 +19,18 @@ This tool produces **spectral candidates** that warrant field validation. It doe
 
 **Not product accuracy:** supervised RF / HistGB multi-seed (~0.79–0.82) are research **Track C** (Tetracorder imitation when labels exist). See [`docs/BEST_NUMBERS.md`](docs/BEST_NUMBERS.md).
 
-### Reference vs ours vs diff
+### True-color + class mask (and full panel)
 
-![Cuprite: Tetracorder reference | fuse_classical | agreement diff](docs/assets/cuprite-gt-vs-ours.png)
+![Cuprite panel: true-color, overlay, reference, solid map, diff](docs/assets/cuprite-gt-vs-ours.png)
 
-*Left: Tetracorder reference map · Center: our `fuse_classical` map · Right: green = agree, red = disagree. OA ≈ 0.72 full-scene is **map-to-map agreement**, not mineral truth.*
+*AVIRIS true-color underlay · class mask on terrain · Tetracorder reference · solid class map · agreement diff. OA ≈ 0.72 full-scene is **map-to-map agreement**, not mineral truth.*
 
-| Ours | Reference | Diff |
-|------|-----------|------|
+| True-color (cube RGB) | Class on true-color |
+|-----------------------|---------------------|
+| ![True-color](docs/assets/cuprite-true-color.png) | ![Overlay](docs/assets/cuprite-class-overlay.png) |
+
+| Ours (solid) | Reference | Diff |
+|--------------|-----------|------|
 | ![Ours](docs/assets/cuprite-ours-fuse.png) | ![Reference](docs/assets/cuprite-reference-tetracorder.png) | ![Diff](docs/assets/cuprite-diff.png) |
 
 Reproduce:

@@ -7,24 +7,25 @@
 
 ## Product proof panel (Cuprite)
 
-![Tetracorder | fuse_classical | diff](assets/cuprite-gt-vs-ours.png)
+![True-color | overlay | Tetracorder | solid | diff](assets/cuprite-gt-vs-ours.png)
 
-*Map-to-map agreement with Tetracorder 4.4 fd maps. Not field XRD. Not ore proof.*
+*Map-to-map agreement with Tetracorder 4.4 fd maps. True-color is AVIRIS RGB (~650/550/470 nm); class mask is alpha-blended on terrain. Not field XRD. Not ore proof.*
 
 | Full-scene fuse_classical | Spatial multi-seed fuse (5 seeds) |
 |---------------------------|-----------------------------------|
-| **OA ≈ 0.717** · κ ≈ 0.657 · n = 84 669 | **OA 0.664 ± 0.092** · κ ≈ 0.569 |
+| **OA ≈ 0.718** · κ ≈ 0.658 · n = 84 669 | **OA 0.664 ± 0.092** · κ ≈ 0.569 |
 
 ```bash
 .venv/bin/python scripts/run_cuprite_real_validation.py
-# outputs/cuprite-real-eval/{comparison_panel.png,metrics.json,report.md}
+# outputs/cuprite-real-eval/{true_color,class_overlay,comparison_panel}.png
+# metrics.json, report.md
 ```
 
 Gallery:
 
-| Ours | Reference | Diff |
-|------|-----------|------|
-| ![ours](assets/cuprite-ours-fuse.png) | ![ref](assets/cuprite-reference-tetracorder.png) | ![diff](assets/cuprite-diff.png) |
+| True-color | Overlay | Ours | Reference | Diff |
+|------------|---------|------|-----------|------|
+| ![tc](assets/cuprite-true-color.png) | ![ov](assets/cuprite-class-overlay.png) | ![ours](assets/cuprite-ours-fuse.png) | ![ref](assets/cuprite-reference-tetracorder.png) | ![diff](assets/cuprite-diff.png) |
 
 ---
 
