@@ -24,24 +24,24 @@ def main(argv: Sequence[str] | None = None) -> int:
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="spectral-match",
-        description="Map exposed surface mineral signatures from hyperspectral raster cubes.",
+        description="Universal spectral matching engine for hyperspectral classification",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    predict = subparsers.add_parser("predict", help="Run SAM/NNLS mineral mapping on a raster cube")
-    predict.add_argument("input", help="Input .tif, .tiff, .h5, .hdf5, or .mat raster cube")
-    predict.add_argument("--sensor", default="cubert_ultris_s5", help="Sensor preset name")
-    predict.add_argument("--wavelengths", help="Path to a JSON array of wavelengths")
-    predict.add_argument("--library", help="Path to a user spectral library CSV")
-    predict.add_argument("--classes", "--minerals", required=True, dest="classes", help="Comma-separated class names")
-    predict.add_argument("--output-dir", required=True, help="Directory for result outputs")
-    predict.add_argument("--sam-threshold-deg", type=float, default=12.0)
-    predict.add_argument("--min-confidence", type=float, default=0.65)
-    predict.add_argument("--tile-size", type=int, default=128)
-    predict.add_argument("--normalization", choices=["none", "l2", "percentile"], default="l2")
-    predict.add_argument("--exclude-bands", help="Comma-separated zero-based band indices to exclude (e.g. 0,3,10)")
-    predict.add_argument("--min-band-valid-fraction", type=float, default=0.5)
-    predict.add_argument(
+    match = subparsers.add_parser("match", help="Run SAM/NNLS classification on a raster cube")
+    match.add_argument("input", help="Input .tif, .tiff, .h5, .hdf5, or .mat raster cube")
+    match.add_argument("--sensor", default="aviris", help="Sensor preset name")
+    match.add_argument("--wavelengths", help="Path to a JSON array of wavelengths")
+    match.add_argument("--library", help="Path to a user spectral library CSV")
+    match.add_argument("--classes", required=True, help="Comma-separated class names")
+    match.add_argument("--output", required=True, help="Directory for result outputs")
+    match.add_argument("--sam-threshold-deg", type=float, default=12.0)
+    match.add_argument("--min-confidence", type=float, default=0.65)
+    match.add_argument("--tile-size", type=int, default=128)
+    match.add_argument("--normalization", choices=["none", "l2", "percentile"], default="l2")
+    match.add_argument("--exclude-bands", help="Comma-separated zero-based band indices to exclude (e.g. 0,3,10)")
+    match.add_argument("--min-band-valid-fraction", type=float, default=0.5)
+    match.add_argument(
         "--classifier",
         default="sam",
         choices=[
@@ -57,24 +57,11 @@ def _build_parser() -> argparse.ArgumentParser:
             "mnf_sam=MNF+SAM, mnf_mtmf=MNF then MTMF, fuse_classical=MTMF+CR-SAM+MNF-SAM fusion"
         ),
     )
-    predict.add_argument("--mf-threshold", type=float, default=0.5, help="MTMF MF acceptance threshold")
-    predict.add_argument(
-        "--infeas-threshold",
-        type=float,
-        default=10.0,
-        help="MTMF infeasibility rejection threshold",
-    )
-    predict.add_argument(
-        "--n-mnf-components",
-        type=int,
-        default=20,
-        help="MNF components for mnf_sam / mnf_mtmf",
-    )
-    predict.set_defaults(func=_run_predict)
+    match.set_defaults(func=_run_match)
 
     qc = subparsers.add_parser("qc-raster", help="Run raster quality control and band analysis")
     qc.add_argument("input", help="Input .tif, .tiff, .h5, .hdf5, or .mat raster cube")
-    qc.add_argument("--sensor", default="cubert_ultris_s5", help="Sensor preset name")
+    qc.add_argument("--sensor", default="aviris", help="Sensor preset name")
     qc.add_argument("--wavelengths", help="Path to a JSON array of wavelengths")
     qc.add_argument("--exclude-bands", help="Comma-separated zero-based band indices to exclude (e.g. 0,3,10)")
     qc.add_argument("--min-band-valid-fraction", type=float, default=0.5)
@@ -83,8 +70,8 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _run_predict(args: argparse.Namespace) -> int:
-    output_dir = Path(args.output_dir)
+def _run_match(args: argparse.Namespace) -> int:
+    output_dir = Path(args.output)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     wavelengths = None

@@ -16,7 +16,7 @@ _MAX_UPLOAD_BYTES = 100 * 1024 * 1024
 _CHUNK_SIZE = 64 * 1024
 
 
-app = FastAPI(title="Open Ore Mapper", version="0.1.0")
+app = FastAPI(title="Spectral", version="0.1.0")
 
 
 @app.get("/health")
@@ -24,9 +24,9 @@ def health() -> dict[str, str]:
     return {"status": "healthy"}
 
 
-@app.get("/v1/minerals")
-def minerals() -> dict[str, list[str]]:
-    return {"minerals": [
+@app.get("/v1/classes")
+def classes() -> dict[str, list[str]]:
+    return {"classes": [
         "hematite", "goethite", "jarosite", "kaolinite", "montmorillonite",
         "illite", "calcite", "dolomite", "muscovite", "chlorite",
         "epidote", "alunite", "gypsum", "magnetite",
@@ -66,8 +66,8 @@ async def qc_raster(
         return _bad_request(str(exc))
 
 
-@app.post("/v1/predict", response_model=None)
-async def predict(
+@app.post("/v1/match", response_model=None)
+async def match(
     file: UploadFile = File(...),
     options: str = Form("{}"),
 ) -> dict[str, Any] | JSONResponse:
@@ -100,7 +100,7 @@ def _parse_options(options_text: str) -> MatchOptions:
         raise ValueError("options must be a JSON object")
 
     wavelengths = _optional_float_list(raw.get("wavelengths"), "wavelengths")
-    classes = _string_list(raw.get("classes", raw.get("minerals", [])), "classes")
+    classes = _string_list(raw.get("classes", []), "classes")
     if raw.get("spectral_library") is not None:
         raise ValueError(
             "API spectral_library paths are not supported; use the CLI --library option or a future multipart library upload"
@@ -118,7 +118,7 @@ def _parse_options(options_text: str) -> MatchOptions:
 
     return MatchOptions(
         wavelengths=wavelengths,
-        sensor=str(raw.get("sensor", "cubert_ultris_s5")),
+        sensor=str(raw.get("sensor", "aviris")),
         classes=classes if classes else [],
         spectral_library=None,
         sam_threshold_deg=float(raw.get("sam_threshold_deg", 12.0)),
