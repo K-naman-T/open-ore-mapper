@@ -31,7 +31,7 @@ def test_predict_file_on_synthetic_cubert_like_tiff(tmp_path: Path) -> None:
     )
 
     assert result.status == "success"
-    assert result.model_used == "library_sam_nnls_v1"
+    assert "nnls" in result.model_used
     assert result.classes == ["hematite_demo", "goethite_demo"]
     assert result.output_image.startswith("data:image/png;base64,")
     assert "hematite_demo" in result.statistics

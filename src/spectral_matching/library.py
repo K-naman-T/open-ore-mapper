@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import io
 from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
@@ -109,6 +110,55 @@ def resample_library(library: SpectralLibrary, target_wavelengths: list[float]) 
         spectra=cast(NDArray[np.float32], resampled),
         source=library.source,
         is_authoritative=library.is_authoritative,
+    )
+
+
+def load_csv_bytes(data: bytes, target_classes: list[str] | None = None) -> SpectralLibrary:
+    rows_by_name: OrderedDict[str, list[tuple[float, float]]] = OrderedDict()
+    with io.TextIOWrapper(io.BytesIO(data), encoding="utf-8") as text_stream:
+        reader = csv.DictReader(text_stream)
+        required = {"name", "wavelength", "reflectance"}
+        if reader.fieldnames is None or not required.issubset(reader.fieldnames):
+            raise ValueError("Spectral library CSV requires columns: name, wavelength, reflectance")
+        for row in reader:
+            name = (row.get("name") or "").strip()
+            if not name:
+                raise ValueError("Spectral library rows require a mineral name")
+            wavelength = _parse_finite_float(row.get("wavelength"), "wavelength")
+            reflectance = _parse_finite_float(row.get("reflectance"), "reflectance")
+            rows_by_name.setdefault(name, []).append((wavelength, reflectance))
+
+    if not rows_by_name:
+        raise ValueError("Spectral library CSV is empty")
+
+    selected_names = list(rows_by_name) if target_classes is None else list(target_classes)
+    missing = [name for name in selected_names if name not in rows_by_name]
+    if missing:
+        raise ValueError(f"Unknown minerals: {', '.join(missing)}")
+
+    wavelengths: NDArray[np.float32] | None = None
+    spectra_rows: list[list[float]] = []
+    for name in selected_names:
+        pairs = rows_by_name[name]
+        mineral_wavelengths = np.asarray([wavelength for wavelength, _value in pairs], dtype=np.float32)
+        if np.any(np.diff(mineral_wavelengths) <= 0):
+            raise ValueError(f"Wavelengths for {name} must be strictly increasing")
+        if wavelengths is None:
+            wavelengths = cast(NDArray[np.float32], mineral_wavelengths)
+        elif not np.array_equal(wavelengths, mineral_wavelengths):
+            raise ValueError("All selected minerals must use the same wavelength grid")
+        spectra_rows.append([reflectance for _wavelength, reflectance in pairs])
+
+    if wavelengths is None:
+        raise ValueError("No selected minerals found")
+
+    spectra = np.asarray(spectra_rows, dtype=np.float32)
+    return SpectralLibrary(
+        names=selected_names,
+        wavelengths=wavelengths,
+        spectra=cast(NDArray[np.float32], spectra),
+        source="user CSV: uploaded bytes",
+        is_authoritative=False,
     )
 
 

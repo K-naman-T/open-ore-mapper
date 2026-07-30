@@ -11,7 +11,7 @@ class MatchOptions:
     classes: list[str] = field(default_factory=lambda: [
         "hematite", "goethite", "jarosite", "kaolinite", "montmorillonite",
         "illite", "calcite", "dolomite", "muscovite", "chlorite",
-        "epidote", "alunite", "gypsum", "magnetite",
+        "epidote", "alunite", "gypsum",
     ])
     spectral_library: str | None = None
     sam_threshold_deg: float = 12.0
@@ -20,12 +20,11 @@ class MatchOptions:
     normalization: str = "l2"
     excluded_band_indices: list[int] = field(default_factory=list)
     min_band_valid_fraction: float = 0.5
-    classifier: str = "sam"
+    classifier: str = "auto"
     use_mtmf: bool = False
     mf_threshold: float = 0.5
     infeas_threshold: float = 10.0
     n_mnf_components: int = 20
-    unmixing: str = "auto"
 
 
 @dataclass(frozen=True)

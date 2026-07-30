@@ -43,8 +43,9 @@ def _build_parser() -> argparse.ArgumentParser:
     match.add_argument("--min-band-valid-fraction", type=float, default=0.5)
     match.add_argument(
         "--classifier",
-        default="sam",
+        default="auto",
         choices=[
+            "auto",
             "sam",
             "cr_sam",
             "mtmf",
@@ -53,8 +54,9 @@ def _build_parser() -> argparse.ArgumentParser:
             "fuse_classical",
         ],
         help=(
-            "Classifier: sam=SAM+NNLS, cr_sam=CR region SAM, mtmf=mixture-tuned MF, "
-            "mnf_sam=MNF+SAM, mnf_mtmf=MNF then MTMF, fuse_classical=MTMF+CR-SAM+MNF-SAM fusion"
+            "Classifier: auto=automatic selection, sam=SAM+NNLS, cr_sam=CR region SAM, "
+            "mtmf=mixture-tuned MF, mnf_sam=MNF+SAM, mnf_mtmf=MNF then MTMF, "
+            "fuse_classical=MTMF+CR-SAM+MNF-SAM fusion"
         ),
     )
     match.set_defaults(func=_run_match)

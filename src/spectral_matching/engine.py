@@ -28,6 +28,7 @@ UNKNOWN_CLASS = 255
 # Classifiers fully implemented in _classify_core (not remapped to SAM).
 _IMPLEMENTED_CLASSIFIERS = frozenset(
     {
+        "auto",
         "sam",
         "cr_sam",
         "mtmf",
@@ -142,6 +143,14 @@ class SpectralMatcher:
 
         )
 
+    @staticmethod
+    def _auto_classifier(n_classes: int, n_bands: int) -> str:
+        if n_classes >= 50:
+            return "mnf_mtmf"
+        if n_bands > 100:
+            return "fuse_classical"
+        return "sam"
+
     def _classify_core(
         self,
         cube: NDArray[np.floating[Any]],
@@ -155,7 +164,10 @@ class SpectralMatcher:
         abundance_cube_input = normalize_cube(cube, "none")
         abundance_refs = normalize_cube(library.spectra[np.newaxis, :, :], "none")[0]
 
-        effective = self._effective_classifier(options.classifier, use_mtmf=options.use_mtmf)
+        classifier = options.classifier
+        if classifier.strip().lower() == "auto":
+            classifier = self._auto_classifier(len(library.names), len(wavelengths))
+        effective = self._effective_classifier(classifier, use_mtmf=options.use_mtmf)
 
         wavelengths_np = np.array(wavelengths, dtype=np.float32)
         height, width, _bands = normalized_cube.shape
@@ -499,6 +511,7 @@ class SpectralMatcher:
             # Legacy flag: force MTMF when classifier is still the default SAM path
             return "mtmf"
         if name in (
+            "auto",
             "sam",
             "cr_sam",
             "mtmf",

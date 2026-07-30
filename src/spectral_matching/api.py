@@ -1,11 +1,15 @@
 import json
 import logging
+import tempfile
 import uuid
+from dataclasses import replace
+from pathlib import Path
 from typing import Any, Union
 
 from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.responses import JSONResponse
 
+from .library import load_csv_bytes
 from .schemas import MatchOptions
 from .engine import SpectralMatcher
 
@@ -29,7 +33,7 @@ def classes() -> dict[str, list[str]]:
     return {"classes": [
         "hematite", "goethite", "jarosite", "kaolinite", "montmorillonite",
         "illite", "calcite", "dolomite", "muscovite", "chlorite",
-        "epidote", "alunite", "gypsum", "magnetite",
+        "epidote", "alunite", "gypsum",
     ]}
 
 
@@ -69,6 +73,7 @@ async def qc_raster(
 @app.post("/v1/match", response_model=None)
 async def match(
     file: UploadFile = File(...),
+    library: UploadFile = File(None),
     options: str = Form("{}"),
 ) -> dict[str, Any] | JSONResponse:
     predict_id = uuid.uuid4().hex[:12]
@@ -80,6 +85,18 @@ async def match(
         return _bad_request("Uploaded file is empty")
     try:
         mapper_options = _parse_options(options)
+
+        if library is not None and library.filename:
+            lib_bytes = await _read_upload(library)
+            if lib_bytes:
+                lib_obj = load_csv_bytes(lib_bytes)
+                mapper_options = replace(mapper_options, classes=lib_obj.names)
+                suffix = Path(library.filename).suffix or ".csv"
+                tmp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+                tmp.write(lib_bytes)
+                tmp.close()
+                mapper_options = replace(mapper_options, spectral_library=tmp.name)
+
         mapper = SpectralMatcher()
         result = mapper.predict_bytes(
             file_bytes, file.filename or "upload.tif", mapper_options
@@ -127,12 +144,11 @@ def _parse_options(options_text: str) -> MatchOptions:
         normalization=str(raw.get("normalization", "l2")),
         excluded_band_indices=excluded,
         min_band_valid_fraction=float(raw.get("min_band_valid_fraction", 0.5)),
-        classifier=str(raw.get("classifier", "sam")),
+        classifier=str(raw.get("classifier", "auto")),
         use_mtmf=bool(raw.get("use_mtmf", False)),
         mf_threshold=float(raw.get("mf_threshold", 0.5)),
         infeas_threshold=float(raw.get("infeas_threshold", 10.0)),
         n_mnf_components=int(raw.get("n_mnf_components", 20)),
-        unmixing=str(raw.get("unmixing", "auto")),
     )
 
 
