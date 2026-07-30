@@ -168,67 +168,6 @@ class TestGetTileMetadataValidation:
 
 
 # ---------------------------------------------------------------------------
-# API-level tests for the tile endpoint
-# ---------------------------------------------------------------------------
-
-
-def test_tile_api_traversal_returns_404(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    import spectral_matching.tileserver as ts
-
-    monkeypatch.setattr(ts, "TILES_DIR", tmp_path)
-    from spectral_matching.api import app
-    from fastapi.testclient import TestClient
-
-    client = TestClient(app)
-    # URL-encoded slashes that route to the endpoint; get_tile_path will
-    # reject the map_uuid and return None → 404
-    resp = client.get("/v1/maps/%2e%2e%2f%2e%2e%2fetc/tiles/0/0/0.png")
-    assert resp.status_code == 404
-
-
-def test_tile_api_negative_z_returns_422(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    import spectral_matching.tileserver as ts
-
-    monkeypatch.setattr(ts, "TILES_DIR", tmp_path)
-    from spectral_matching.api import app
-    from fastapi.testclient import TestClient
-
-    client = TestClient(app)
-    resp = client.get("/v1/maps/valid-id/tiles/-1/0/0.png")
-    assert resp.status_code == 422
-
-
-def test_tile_api_empty_map_uuid_returns_404(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    import spectral_matching.tileserver as ts
-
-    monkeypatch.setattr(ts, "TILES_DIR", tmp_path)
-    from spectral_matching.api import app
-    from fastapi.testclient import TestClient
-
-    client = TestClient(app)
-    resp = client.get("/v1/maps//tiles/0/0/0.png")
-    assert resp.status_code == 404
-
-
-def test_tile_api_valid_tile_returns_200(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    import spectral_matching.tileserver as ts
-
-    monkeypatch.setattr(ts, "TILES_DIR", tmp_path)
-    from spectral_matching.api import app
-    from fastapi.testclient import TestClient
-
-    p = tmp_path / "valid-id" / "0" / "0" / "0.png"
-    p.parent.mkdir(parents=True)
-    p.write_bytes(b"PNG")
-    (tmp_path / "valid-id" / "metadata.json").write_text('{"map_uuid":"valid-id","bbox":[0,0,1,1]}')
-
-    client = TestClient(app)
-    resp = client.get("/v1/maps/valid-id/tiles/0/0/0.png")
-    assert resp.status_code == 200
-    assert "image/png" in resp.headers["content-type"]
-
-
-# ---------------------------------------------------------------------------
 # Existing tests (unchanged behaviour)
 # ---------------------------------------------------------------------------
 

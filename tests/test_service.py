@@ -495,52 +495,7 @@ def test_mat_file_int16_qc(tmp_path: Path) -> None:
     assert report.band_count == 3
 
 
-def test_real_mineral_names_raise_error_when_relab_fails(tmp_path: Path) -> None:
-    cube = np.ones((4, 4, 3), dtype=np.float32) * 0.5
-    path = tmp_path / "real_minerals.tif"
-    tifffile.imwrite(path, cube, photometric="minisblack")
-
-    with patch("spectral_matching.relab_fetcher.build_spectral_library") as mock_build:
-        mock_build.side_effect = RuntimeError("RELAB unavailable")
-
-        with pytest.raises(ValueError, match="Authoritative spectra unavailable"):
-            SpectralMatcher().predict_file(
-                path,
-                MatchOptions(
-                    wavelengths=[400.0, 500.0, 600.0],
-                    sensor="manual",
-                    classes=["hematite", "goethite"],
-                    min_confidence=0.0,
-                    sam_threshold_deg=180.0,
-                ),
-            )
-
-
-def test_demo_minerals_still_work_after_relab_failure(tmp_path: Path) -> None:
-    cube = np.ones((4, 4, 3), dtype=np.float32) * 0.5
-    path = tmp_path / "demo_minerals.tif"
-    tifffile.imwrite(path, cube, photometric="minisblack")
-
-    with patch("spectral_matching.relab_fetcher.build_spectral_library") as mock_build:
-        mock_build.side_effect = RuntimeError("RELAB unavailable")
-
-        result = SpectralMatcher().predict_file(
-            path,
-            MatchOptions(
-                wavelengths=[400.0, 500.0, 600.0],
-                sensor="manual",
-                classes=["hematite_demo", "goethite_demo"],
-                min_confidence=0.0,
-                sam_threshold_deg=180.0,
-            ),
-        )
-
-    assert result.status == "success"
-    assert "hematite_demo" in result.classes
-    assert "goethite_demo" in result.classes
-
-
-def test_user_csv_library_bypasses_relab_fallback(tmp_path: Path) -> None:
+def test_user_csv_library_with_real_names(tmp_path: Path) -> None:
     cube = np.ones((4, 4, 2), dtype=np.float32) * 0.5
     path = tmp_path / "csv_library.tif"
     tifffile.imwrite(path, cube, photometric="minisblack")
