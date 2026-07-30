@@ -15,6 +15,8 @@ def export_geotiff(
     classes: list[str],
     source_path: str | Path | None = None,
 ) -> Path:
+    if class_map.size == 0 or confidence_map.size == 0:
+        raise ValueError("class_map and confidence_map must not be empty")
     dest = Path(path)
 
     extratags: list[tuple[int, str, int, object, bool]] = []
