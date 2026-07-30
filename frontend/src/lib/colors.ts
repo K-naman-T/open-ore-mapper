@@ -1,33 +1,18 @@
-export const MINERAL_COLORS: Record<string, string> = {
-  default: "#B13824",
-}
-
-export const CLASS_COLORS = [
-  "#B13824",
-  "#D67527",
-  "#E7B239",
-  "#52545B",
-  "#885C30",
-  "#C2864F",
-  "#79562D",
-  "#4E7E99",
-  "#4E9974",
-  "#775CA3",
-  "#B54D7A",
-  "#6C6F3D",
-  "#2D7B8C",
-  "#8C4E6B",
-  "#5A7A4A",
-  "#A5682A",
+export const CLASS_COLORS: string[] = [
+  "#e6194b", "#3cb44b", "#4363d8", "#f58231",
+  "#911eb4", "#42d4f4", "#f032e6", "#bfef45",
+  "#fabed4", "#469990", "#dcbeff", "#9a6324",
+  "#800000", "#aaffc3",
 ]
 
-export function mineralColor(index: number): string {
+export function getClassColor(index: number): string {
   return CLASS_COLORS[index % CLASS_COLORS.length]
 }
 
-export function hexToRgba(hex: string, alpha: number): string {
-  const r = parseInt(hex.slice(1, 3), 16)
-  const g = parseInt(hex.slice(3, 5), 16)
-  const b = parseInt(hex.slice(5, 7), 16)
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+export function classColorMap(classes: string[]): Record<string, string> {
+  const map: Record<string, string> = {}
+  classes.forEach((cls, i) => {
+    map[cls] = getClassColor(i)
+  })
+  return map
 }
