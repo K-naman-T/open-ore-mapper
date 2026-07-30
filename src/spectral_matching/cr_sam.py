@@ -1,6 +1,6 @@
 """Continuum-removed / region-weighted SAM — classical CPU spectral matching.
 
-Addresses full-spectrum SAM failures on Cuprite-style SWIR minerals by:
+Addresses full-spectrum SAM failures on SWIR-range spectra by:
 1. Linear continuum removal (fast, vectorized)
 2. Separate VNIR (Fe-oxides) and SWIR (clays/carbonates/silica) windows
 3. Region-gated argmin so kaolinite is not compared to hematite in full space
@@ -48,7 +48,7 @@ def linear_continuum_remove(
     if arr.ndim != 2 or arr.shape[1] < 2:
         return cast(NDArray[np.float32], arr.astype(np.float32))
     n, b = arr.shape
-    x0, x1 = 0.0, float(b - 1)
+    _x0, _x1 = 0.0, float(b - 1)
     y0 = arr[:, 0]
     y1 = arr[:, -1]
     t = np.linspace(0.0, 1.0, b, dtype=np.float64)
@@ -74,7 +74,7 @@ def classify_cr_sam(
     pixels: NDArray[np.floating[Any]],
     ref_spectra: NDArray[np.floating[Any]],
     wavelengths: NDArray[np.floating[Any]],
-    mineral_names: list[str],
+    class_names: list[str],
     *,
     sam_threshold_deg: float = 12.0,
     min_strength: float = 0.55,
@@ -91,7 +91,7 @@ def classify_cr_sam(
     if n == 0:
         return np.zeros(0, dtype=np.uint8), np.zeros(0, dtype=np.float32)
 
-    names_l = [m.lower() for m in mineral_names]
+    names_l = [m.lower() for m in class_names]
     fe_idx = [i for i, m in enumerate(names_l) if m in FE_OXIDES]
     swir_idx = [i for i, m in enumerate(names_l) if m in SWIR_MINERALS]
     # ungrouped go to both
@@ -124,7 +124,7 @@ def classify_cr_sam(
     ang_vnir = _angles_on_mask(pix_cr, ref_cr, vnir_m)
     ang_swir = _angles_on_mask(pix_cr, ref_cr, swir_m)
 
-    # For each pixel, score each mineral with region-appropriate angle
+    # For each pixel, score each class with region-appropriate angle
     scores = np.zeros((n, k), dtype=np.float64)
     for j, name in enumerate(names_l):
         if name in FE_OXIDES:
@@ -139,7 +139,7 @@ def classify_cr_sam(
 
     scores = np.clip(scores, 0.0, 1.0)
 
-    # Hierarchical gate: if best SWIR score clearly beats best Fe, restrict to SWIR minerals
+    # Hierarchical gate: if best SWIR score clearly beats best Fe, restrict to SWIR classes
     best_fe = np.max(scores[:, fe_idx], axis=1) if fe_idx else np.zeros(n)
     best_sw = np.max(scores[:, swir_idx], axis=1) if swir_idx else np.zeros(n)
     use_swir = best_sw >= best_fe - 0.02
@@ -184,7 +184,7 @@ def classify_cube_cr_sam(
     cube: NDArray[np.floating[Any]],
     ref_spectra: NDArray[np.floating[Any]],
     wavelengths: list[float] | NDArray[np.floating[Any]],
-    mineral_names: list[str],
+    class_names: list[str],
     valid_mask: NDArray[np.bool_],
     *,
     tile_size: int = 128,
@@ -212,7 +212,7 @@ def classify_cube_cr_sam(
                 flat[flat_v],
                 refs,
                 wl,
-                mineral_names,
+                class_names,
                 sam_threshold_deg=sam_threshold_deg,
                 min_strength=min_strength,
             )

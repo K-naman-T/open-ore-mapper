@@ -115,7 +115,7 @@ def analyze_raster_quality(
         )
     if len(retained_band_indices) < 2:
         warnings.append(
-            "Insufficient usable bands: at least 2 are required for mineral mapping"
+            "Insufficient usable bands: at least 2 are required for spectral classification"
         )
 
     if len(retained_band_indices) < 2:

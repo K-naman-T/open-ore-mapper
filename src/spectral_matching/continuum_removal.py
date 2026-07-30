@@ -21,9 +21,9 @@ class AbsorptionFeature:
 
 class FeatureLibrary:
     def __init__(
-        self, mineral_names: list[str], features: list[list[AbsorptionFeature]]
+        self, class_names: list[str], features: list[list[AbsorptionFeature]]
     ) -> None:
-        self.mineral_names = mineral_names
+        self.class_names = class_names
         self.features = features
 
     @classmethod
@@ -35,7 +35,7 @@ class FeatureLibrary:
             hq = hull_quotient(lib.wavelengths, spectrum)
             feats = extract_absorption_features(lib.wavelengths, hq, min_depth)
             features.append(feats)
-        return cls(mineral_names=list(lib.names), features=features)
+        return cls(class_names=list(lib.names), features=features)
 
 
 def hull_quotient(
@@ -155,11 +155,11 @@ def match_features(
     pixel_features: list[AbsorptionFeature],
     library: FeatureLibrary,
 ) -> NDArray[np.float32]:
-    n_minerals = len(library.mineral_names)
-    scores: NDArray[np.float32] = np.zeros(n_minerals, dtype=np.float32)
+    n_classes = len(library.class_names)
+    scores: NDArray[np.float32] = np.zeros(n_classes, dtype=np.float32)
 
-    for mineral_idx in range(n_minerals):
-        lib_features = library.features[mineral_idx]
+    for class_idx in range(n_classes):
+        lib_features = library.features[class_idx]
         if not lib_features or not pixel_features:
             continue
 
@@ -176,7 +176,7 @@ def match_features(
             total_score += best_score
 
         avg_score = total_score / len(lib_features)
-        scores[mineral_idx] = np.clip(float(avg_score), 0.0, 1.0)
+        scores[class_idx] = np.clip(float(avg_score), 0.0, 1.0)
 
     return scores
 
@@ -210,7 +210,7 @@ def match_features_batch(
     library: FeatureLibrary,
 ) -> NDArray[np.float32]:
     N = len(pixel_features)
-    M = len(library.mineral_names)
+    M = len(library.class_names)
     scores: NDArray[np.float32] = np.zeros((N, M), dtype=np.float32)
     for i in range(N):
         scores[i] = match_features(pixel_features[i], library)

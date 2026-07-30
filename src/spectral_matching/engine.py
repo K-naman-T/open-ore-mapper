@@ -68,7 +68,7 @@ class SpectralMatcher:
     ) -> MatchResult:
         selected_options = options or MatchOptions()
         if not selected_options.classes:
-            raise ValueError("At least one mineral is required")
+            raise ValueError("At least one class is required")
 
         band_count_hint = (
             len(selected_options.wavelengths) if selected_options.wavelengths is not None else None
@@ -171,10 +171,10 @@ class SpectralMatcher:
 
         wavelengths_np = np.array(wavelengths, dtype=np.float32)
         height, width, _bands = normalized_cube.shape
-        mineral_count = len(library.names)
+        class_count = len(library.names)
         class_map = np.full((height, width), UNKNOWN_CLASS, dtype=np.uint8)
         confidence_map = np.zeros((height, width), dtype=np.float32)
-        abundance_cube = np.zeros((height, width, mineral_count), dtype=np.float32)
+        abundance_cube = np.zeros((height, width, class_count), dtype=np.float32)
 
         if effective == "mtmf":
             class_map, confidence_map, abundance_cube = self._classify_mtmf(
@@ -182,7 +182,7 @@ class SpectralMatcher:
                 abundance_refs,
                 valid_mask,
                 options,
-                mineral_count,
+                class_count,
             )
         elif effective == "mnf_sam":
             class_map, confidence_map, abundance_cube = self._classify_mnf_sam(
@@ -190,7 +190,7 @@ class SpectralMatcher:
                 abundance_refs,
                 valid_mask,
                 options,
-                mineral_count,
+                class_count,
             )
         elif effective == "mnf_mtmf":
             class_map, confidence_map, abundance_cube = self._classify_mnf_mtmf(
@@ -198,7 +198,7 @@ class SpectralMatcher:
                 abundance_refs,
                 valid_mask,
                 options,
-                mineral_count,
+                class_count,
             )
         elif effective in ("fuse", "fuse_classical"):
             class_map, confidence_map, abundance_cube = self._classify_fuse_classical(
@@ -208,7 +208,7 @@ class SpectralMatcher:
                 library.names,
                 valid_mask,
                 options,
-                mineral_count,
+                class_count,
             )
         else:
             # Default: SAM + NNLS
@@ -237,7 +237,7 @@ class SpectralMatcher:
 
                 tile_classes = np.full(flat_valid.shape, UNKNOWN_CLASS, dtype=np.uint8)
                 tile_conf = np.zeros(flat_valid.shape, dtype=np.float32)
-                tile_abund = np.zeros((flat_valid.shape[0], mineral_count), dtype=np.float32)
+                tile_abund = np.zeros((flat_valid.shape[0], class_count), dtype=np.float32)
                 valid_positions = np.where(flat_valid)[0]
                 tile_classes[valid_positions[accepted]] = best_idx[accepted]
                 tile_conf[valid_positions] = best_conf
@@ -248,7 +248,7 @@ class SpectralMatcher:
                 abundance_cube[row0:row1, col0:col1, :] = tile_abund.reshape(
                     row1 - row0,
                     col1 - col0,
-                    mineral_count,
+                    class_count,
                 )
 
         return class_map, confidence_map, abundance_cube
@@ -259,7 +259,7 @@ class SpectralMatcher:
         refs: NDArray[np.floating[Any]],
         valid_mask: NDArray[np.bool_],
         options: MatchOptions,
-        mineral_count: int,
+        class_count: int,
     ) -> tuple[NDArray[np.uint8], NDArray[np.float32], NDArray[np.float32]]:
         """Mixture-Tuned Matched Filter multi-class assignment.
 
@@ -275,7 +275,7 @@ class SpectralMatcher:
 
         class_map = np.full((h, w), UNKNOWN_CLASS, dtype=np.uint8)
         confidence_map = np.zeros((h, w), dtype=np.float32)
-        abundance_cube = np.zeros((h, w, mineral_count), dtype=np.float32)
+        abundance_cube = np.zeros((h, w, class_count), dtype=np.float32)
 
         best_idx = np.argmax(mf, axis=2).astype(np.uint8)
         best_mf = np.max(mf, axis=2).astype(np.float32)
@@ -305,7 +305,7 @@ class SpectralMatcher:
         refs: NDArray[np.floating[Any]],
         valid_mask: NDArray[np.bool_],
         options: MatchOptions,
-        mineral_count: int,
+        class_count: int,
     ) -> tuple[NDArray[np.uint8], NDArray[np.float32], NDArray[np.float32]]:
         """MNF-whiten cube + library, then SAM angles with light NNLS on original spectra.
 
@@ -323,7 +323,7 @@ class SpectralMatcher:
 
         class_map = np.full((h, w), UNKNOWN_CLASS, dtype=np.uint8)
         confidence_map = np.zeros((h, w), dtype=np.float32)
-        abundance_cube = np.zeros((h, w, mineral_count), dtype=np.float32)
+        abundance_cube = np.zeros((h, w, class_count), dtype=np.float32)
 
         for row0, row1, col0, col1 in iter_tiles(h, w, options.tile_size):
             tile = mnf_cube[row0:row1, col0:col1, :]
@@ -351,7 +351,7 @@ class SpectralMatcher:
 
             tile_classes = np.full(flat_valid.shape, UNKNOWN_CLASS, dtype=np.uint8)
             tile_conf = np.zeros(flat_valid.shape, dtype=np.float32)
-            tile_abund = np.zeros((flat_valid.shape[0], mineral_count), dtype=np.float32)
+            tile_abund = np.zeros((flat_valid.shape[0], class_count), dtype=np.float32)
             valid_positions = np.where(flat_valid)[0]
             tile_classes[valid_positions[accepted]] = best_idx[accepted]
             tile_conf[valid_positions] = best_conf
@@ -360,7 +360,7 @@ class SpectralMatcher:
             class_map[row0:row1, col0:col1] = tile_classes.reshape(row1 - row0, col1 - col0)
             confidence_map[row0:row1, col0:col1] = tile_conf.reshape(row1 - row0, col1 - col0)
             abundance_cube[row0:row1, col0:col1, :] = tile_abund.reshape(
-                row1 - row0, col1 - col0, mineral_count
+                row1 - row0, col1 - col0, class_count
             )
 
         return class_map, confidence_map, abundance_cube
@@ -371,7 +371,7 @@ class SpectralMatcher:
         refs: NDArray[np.floating[Any]],
         valid_mask: NDArray[np.bool_],
         options: MatchOptions,
-        mineral_count: int,
+        class_count: int,
     ) -> tuple[NDArray[np.uint8], NDArray[np.float32], NDArray[np.float32]]:
         """Fused path: MNF transform of cube + library, then MTMF in reduced space.
 
@@ -388,7 +388,7 @@ class SpectralMatcher:
         refs_mnf = apply_mnf(refs_f, tmat, data_mean=mu)
 
         return SpectralMatcher._classify_mtmf(
-            mnf_cube, refs_mnf, valid_mask, options, mineral_count
+            mnf_cube, refs_mnf, valid_mask, options, class_count
         )
 
     def to_response(self, result: MatchResult) -> dict[str, Any]:
@@ -541,21 +541,21 @@ class SpectralMatcher:
         cube: NDArray[np.floating[Any]],
         refs: NDArray[np.floating[Any]],
         wavelengths: NDArray[np.floating[Any]],
-        mineral_names: list[str],
+        class_names: list[str],
         valid_mask: NDArray[np.bool_],
         options: MatchOptions,
-        mineral_count: int,
+        class_count: int,
     ) -> tuple[NDArray[np.uint8], NDArray[np.float32], NDArray[np.float32]]:
         """Soft fusion of MTMF + CR-region SAM + MNF-SAM (CPU classical ensemble).
 
         Default weights (from Cuprite grid search maximizing labeled OA):
-        0.7 * MTMF + 0.2 * CR-SAM + 0.1 * MNF-SAM, then argmax over minerals.
+        0.7 * MTMF + 0.2 * CR-SAM + 0.1 * MNF-SAM, then argmax over classes.
         Always assigns on valid pixels (no unknown gate) for multi-class OA.
         """
         h, w, _b = cube.shape
         cube_f = np.asarray(cube, dtype=np.float32)
         refs_f = np.asarray(refs, dtype=np.float32)
-        k = mineral_count
+        k = class_count
 
         # --- MTMF soft scores ---
         mf, _infeas = mtmf(cube_f, refs_f, valid_mask=valid_mask)
@@ -570,7 +570,7 @@ class SpectralMatcher:
             cube_f,
             refs_f,
             wavelengths,
-            mineral_names,
+            class_names,
             valid_mask,
             tile_size=options.tile_size,
             sam_threshold_deg=90.0,
@@ -626,15 +626,15 @@ class SpectralMatcher:
         real_names = [m for m in options.classes if not m.endswith("_demo")]
         if demo_names and real_names:
             raise ValueError(
-                "Cannot mix demo minerals (*_demo) with real mineral names in one run. "
+                "Cannot mix demo classes (*_demo) with real mineral names in one run. "
                 "Use only demo names for plumbing tests, or provide --library / spectral_library "
-                "for real minerals."
+                "for real classes."
             )
         if demo_names and not real_names:
             library = load_demo_library(options.classes)
             return resample_library(library, wavelengths)
 
-        # Real mineral names: require explicit CSV. Do not silently use demo curves or
+        # Real class names: require explicit CSV. Do not silently use demo curves or
         # cache files that may be synthetic Gaussians labeled as RELAB.
         raise ValueError(
             "Authoritative spectra unavailable for real mineral names without a library CSV. "

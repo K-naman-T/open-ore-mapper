@@ -16,8 +16,8 @@ def test_load_csv_library_returns_arrays() -> None:
     assert np.all(np.isfinite(library.spectra))
 
 
-def test_unknown_mineral_has_clear_error() -> None:
-    with pytest.raises(ValueError, match="Unknown minerals"):
+def test_unknown_class_has_clear_error() -> None:
+    with pytest.raises(ValueError, match="Unknown classes"):
         load_demo_library(["unobtainium_demo"])
 
 

@@ -15,7 +15,7 @@ def _write_library_csv(path: Path, names: list[str], wavelengths: list[float]) -
     lines = ["name,wavelength,reflectance"]
     for i, name in enumerate(names):
         for j, wl in enumerate(wavelengths):
-            # Distinct spectral shapes per mineral
+            # Distinct spectral shapes per class
             refl = 0.3 + 0.1 * i + 0.2 * np.sin(0.01 * wl * (i + 1) + j * 0.1)
             lines.append(f"{name},{wl},{refl:.6f}")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")

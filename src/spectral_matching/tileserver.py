@@ -21,7 +21,7 @@ TILES_DIR = Path("data/tiles")
 # may contain hyphens and underscores.
 _VALID_MAP_ID_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$")
 
-# Sanity cap on zoom level (far beyond any practical mineral tile set).
+# Sanity cap on zoom level (far beyond any practical tile set).
 MAX_ZOOM = 30
 
 

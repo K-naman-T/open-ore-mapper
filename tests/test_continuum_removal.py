@@ -75,7 +75,7 @@ def test_extract_features_requires_minimum_depth() -> None:
     assert len(features) == 0
 
 
-def test_match_features_same_mineral_scores_high() -> None:
+def test_match_features_same_class_scores_high() -> None:
     wavelengths = np.linspace(2000, 2400, 101, dtype=np.float32)
     gaussian1 = np.exp(-0.5 * ((wavelengths - 2200.0) / 15.0) ** 2)
     gaussian2 = np.exp(-0.5 * ((wavelengths - 2202.0) / 15.0) ** 2)
@@ -86,12 +86,12 @@ def test_match_features_same_mineral_scores_high() -> None:
     features1 = extract_absorption_features(wavelengths, cr1)
     features2 = extract_absorption_features(wavelengths, cr2)
 
-    lib = FeatureLibrary(mineral_names=["test_mineral"], features=[features2])
+    lib = FeatureLibrary(class_names=["test_class"], features=[features2])
     scores = match_features(features1, lib)
     assert float(scores[0]) > 0.8
 
 
-def test_match_features_different_mineral_scores_low() -> None:
+def test_match_features_different_class_scores_low() -> None:
     wl_oxide = np.linspace(400, 1000, 121, dtype=np.float32)
     wl_carb = np.linspace(2000, 2500, 101, dtype=np.float32)
 
@@ -105,7 +105,7 @@ def test_match_features_different_mineral_scores_low() -> None:
     features_oxide = extract_absorption_features(wl_oxide, cr_oxide, min_depth=0.02)
     features_carb = extract_absorption_features(wl_carb, cr_carb, min_depth=0.02)
 
-    lib = FeatureLibrary(mineral_names=["carbonate"], features=[features_carb])
+    lib = FeatureLibrary(class_names=["carbonate"], features=[features_carb])
     scores = match_features(features_oxide, lib)
     assert float(scores[0]) < 0.5
 
@@ -118,14 +118,14 @@ def test_feature_library_from_spectral_library_has_correct_length() -> None:
         spectra[i] = 0.5 - dip
 
     lib = SpectralLibrary(
-        names=["mineral_a", "mineral_b", "mineral_c"],
+        names=["class_a", "class_b", "class_c"],
         wavelengths=wavelengths,
         spectra=cast(NDArray[np.float32], spectra),
         source="test",
     )
 
     feature_lib = FeatureLibrary.from_spectral_library(lib)
-    assert len(feature_lib.mineral_names) == 3
+    assert len(feature_lib.class_names) == 3
     assert len(feature_lib.features) == 3
 
 
@@ -157,14 +157,14 @@ def test_full_pipeline_vectorized_matches_loop() -> None:
         dip = depth * np.exp(-0.5 * ((wavelengths - center) / 20.0) ** 2)
         spectra[i] = 1.0 - dip
 
-    mineral_names = ["qz", "kln", "ill", "sme", "hly", "gth"]
+    class_names = ["qz", "kln", "ill", "sme", "hly", "gth"]
     lib_features: list[list[AbsorptionFeature]] = []
-    for name in mineral_names:
+    for name in class_names:
         pos = 2100.0 + (hash(name) % 400)
         lib_features.append([
             AbsorptionFeature(position=float(pos), depth=0.2, fwhm=30.0, asymmetry=1.0),
         ])
-    library = FeatureLibrary(mineral_names=mineral_names, features=lib_features)
+    library = FeatureLibrary(class_names=class_names, features=lib_features)
 
     hq_batch = hull_quotient_batch(wavelengths, spectra)
     feats_batch = extract_absorption_features_batch(wavelengths, hq_batch)

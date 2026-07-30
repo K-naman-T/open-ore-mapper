@@ -4,7 +4,7 @@ import tempfile
 import uuid
 from dataclasses import replace
 from pathlib import Path
-from typing import Any, Union
+from typing import Any
 
 from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.responses import JSONResponse

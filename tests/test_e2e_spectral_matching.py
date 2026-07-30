@@ -130,5 +130,5 @@ class TestE2ESpectralMatching:
 
     def test_no_classes_produces_error(self) -> None:
         opts = _opts(self.wavelengths, [], self.csv_path)
-        with pytest.raises(ValueError, match="At least one mineral is required"):
+        with pytest.raises(ValueError, match="At least one class is required"):
             SpectralMatcher().predict_file(self.tif_path, opts)

@@ -30,11 +30,11 @@ _DEMO_VALUES: dict[str, list[tuple[float, float]]] = {
 }
 
 
-def load_demo_library(target_minerals: list[str]) -> SpectralLibrary:
-    missing = [name for name in target_minerals if name not in _DEMO_VALUES]
+def load_demo_library(target_classes: list[str]) -> SpectralLibrary:
+    missing = [name for name in target_classes if name not in _DEMO_VALUES]
     if missing:
-        raise ValueError(f"Unknown minerals: {', '.join(missing)}")
-    names = list(target_minerals)
+        raise ValueError(f"Unknown classes: {', '.join(missing)}")
+    names = list(target_classes)
     wavelengths = np.asarray([pair[0] for pair in _DEMO_VALUES[names[0]]], dtype=np.float32)
     spectra = np.asarray(
         [[reflectance for _wavelength, reflectance in _DEMO_VALUES[name]] for name in names],
@@ -49,7 +49,7 @@ def load_demo_library(target_minerals: list[str]) -> SpectralLibrary:
     )
 
 
-def load_csv_library(path: str | Path, target_minerals: list[str] | None) -> SpectralLibrary:
+def load_csv_library(path: str | Path, target_classes: list[str] | None) -> SpectralLibrary:
     rows_by_name: OrderedDict[str, list[tuple[float, float]]] = OrderedDict()
     with Path(path).open(newline="", encoding="utf-8") as handle:
         reader = csv.DictReader(handle)
@@ -59,7 +59,7 @@ def load_csv_library(path: str | Path, target_minerals: list[str] | None) -> Spe
         for row in reader:
             name = (row.get("name") or "").strip()
             if not name:
-                raise ValueError("Spectral library rows require a mineral name")
+                raise ValueError("Spectral library rows require a class name")
             wavelength = _parse_finite_float(row.get("wavelength"), "wavelength")
             reflectance = _parse_finite_float(row.get("reflectance"), "reflectance")
             rows_by_name.setdefault(name, []).append((wavelength, reflectance))
@@ -67,26 +67,26 @@ def load_csv_library(path: str | Path, target_minerals: list[str] | None) -> Spe
     if not rows_by_name:
         raise ValueError("Spectral library CSV is empty")
 
-    selected_names = list(rows_by_name) if target_minerals is None else list(target_minerals)
+    selected_names = list(rows_by_name) if target_classes is None else list(target_classes)
     missing = [name for name in selected_names if name not in rows_by_name]
     if missing:
-        raise ValueError(f"Unknown minerals: {', '.join(missing)}")
+        raise ValueError(f"Unknown classes: {', '.join(missing)}")
 
     wavelengths: NDArray[np.float32] | None = None
     spectra_rows: list[list[float]] = []
     for name in selected_names:
         pairs = rows_by_name[name]
-        mineral_wavelengths = np.asarray([wavelength for wavelength, _value in pairs], dtype=np.float32)
-        if np.any(np.diff(mineral_wavelengths) <= 0):
+        class_wavelengths = np.asarray([wavelength for wavelength, _value in pairs], dtype=np.float32)
+        if np.any(np.diff(class_wavelengths) <= 0):
             raise ValueError(f"Wavelengths for {name} must be strictly increasing")
         if wavelengths is None:
-            wavelengths = cast(NDArray[np.float32], mineral_wavelengths)
-        elif not np.array_equal(wavelengths, mineral_wavelengths):
-            raise ValueError("All selected minerals must use the same wavelength grid")
+            wavelengths = cast(NDArray[np.float32], class_wavelengths)
+        elif not np.array_equal(wavelengths, class_wavelengths):
+            raise ValueError("All selected classes must use the same wavelength grid")
         spectra_rows.append([reflectance for _wavelength, reflectance in pairs])
 
     if wavelengths is None:
-        raise ValueError("No selected minerals found")
+        raise ValueError("No selected classes found")
 
     spectra = np.asarray(spectra_rows, dtype=np.float32)
     return SpectralLibrary(
@@ -123,7 +123,7 @@ def load_csv_bytes(data: bytes, target_classes: list[str] | None = None) -> Spec
         for row in reader:
             name = (row.get("name") or "").strip()
             if not name:
-                raise ValueError("Spectral library rows require a mineral name")
+                raise ValueError("Spectral library rows require a class name")
             wavelength = _parse_finite_float(row.get("wavelength"), "wavelength")
             reflectance = _parse_finite_float(row.get("reflectance"), "reflectance")
             rows_by_name.setdefault(name, []).append((wavelength, reflectance))
@@ -134,23 +134,23 @@ def load_csv_bytes(data: bytes, target_classes: list[str] | None = None) -> Spec
     selected_names = list(rows_by_name) if target_classes is None else list(target_classes)
     missing = [name for name in selected_names if name not in rows_by_name]
     if missing:
-        raise ValueError(f"Unknown minerals: {', '.join(missing)}")
+        raise ValueError(f"Unknown classes: {', '.join(missing)}")
 
     wavelengths: NDArray[np.float32] | None = None
     spectra_rows: list[list[float]] = []
     for name in selected_names:
         pairs = rows_by_name[name]
-        mineral_wavelengths = np.asarray([wavelength for wavelength, _value in pairs], dtype=np.float32)
-        if np.any(np.diff(mineral_wavelengths) <= 0):
+        class_wavelengths = np.asarray([wavelength for wavelength, _value in pairs], dtype=np.float32)
+        if np.any(np.diff(class_wavelengths) <= 0):
             raise ValueError(f"Wavelengths for {name} must be strictly increasing")
         if wavelengths is None:
-            wavelengths = cast(NDArray[np.float32], mineral_wavelengths)
-        elif not np.array_equal(wavelengths, mineral_wavelengths):
-            raise ValueError("All selected minerals must use the same wavelength grid")
+            wavelengths = cast(NDArray[np.float32], class_wavelengths)
+        elif not np.array_equal(wavelengths, class_wavelengths):
+            raise ValueError("All selected classes must use the same wavelength grid")
         spectra_rows.append([reflectance for _wavelength, reflectance in pairs])
 
     if wavelengths is None:
-        raise ValueError("No selected minerals found")
+        raise ValueError("No selected classes found")
 
     spectra = np.asarray(spectra_rows, dtype=np.float32)
     return SpectralLibrary(

@@ -18,6 +18,7 @@ from __future__ import annotations
 from typing import Any, cast
 
 import numpy as np
+import numpy.typing as npt
 from numpy.typing import NDArray
 
 
@@ -177,7 +178,7 @@ def mnf_transform(
 
     n_s = whitened_c.shape[0]
     if n_s < 2:
-        evecs = np.eye(b, dtype=np.float64)
+        evecs: npt.NDArray[np.float64] = np.eye(b, dtype=np.float64)
     else:
         try:
             _u, _s, vt = np.linalg.svd(whitened_c, full_matrices=False)
