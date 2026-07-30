@@ -19,7 +19,6 @@ from .tiling import iter_tiles
 from .cr_sam import classify_cube_cr_sam
 from .mnf import apply_mnf, mnf_data_mean, mnf_transform
 from .mtmf import mtmf
-from .sff import sff_classify_cube
 from .unmixing import estimate_nnls_abundances
 from .wavelengths import resolve_wavelengths, validate_wavelengths
 
@@ -30,8 +29,6 @@ UNKNOWN_CLASS = 255
 _IMPLEMENTED_CLASSIFIERS = frozenset(
     {
         "sam",
-        "sff",
-        "continuum_removal",
         "cr_sam",
         "mtmf",
         "mnf_sam",
@@ -114,7 +111,7 @@ class OreMapper:
         )
 
         top_abundance = np.max(abundance_cube, axis=2)
-        all_warnings = self._coverage_warnings(retained_wls) + report.warnings
+        all_warnings = report.warnings
         effective = self._effective_classifier(
             selected_options.classifier, use_mtmf=selected_options.use_mtmf
         )
@@ -124,7 +121,7 @@ class OreMapper:
         if effective != requested and not (
             selected_options.use_mtmf and effective == "mtmf"
         ):
-            if requested not in _IMPLEMENTED_CLASSIFIERS and requested != "cr_sam":
+            if requested not in _IMPLEMENTED_CLASSIFIERS:
                 all_warnings.append(
                     f"classifier={selected_options.classifier!r} is not implemented; "
                     f"ran {effective!r} instead"
@@ -142,7 +139,7 @@ class OreMapper:
             statistics=mineral_statistics(class_map, confidence_map, abundance_cube, library.names),
             warnings=all_warnings,
             downloads={},
-            quality_report=report,
+
         )
 
     def _classify_core(
@@ -167,42 +164,7 @@ class OreMapper:
         confidence_map = np.zeros((height, width), dtype=np.float32)
         abundance_cube = np.zeros((height, width, mineral_count), dtype=np.float32)
 
-        if options.use_ace:
-            raise ValueError(
-                "use_ace=True is not wired into the classification pipeline; "
-                "disable ACE or wait for a supported release"
-            )
-        if options.vegetation_mask:
-            raise ValueError(
-                "vegetation_mask=True is not wired into the classification pipeline; "
-                "disable vegetation_mask or wait for a supported release"
-            )
-
-        if effective == "sff":
-            class_map, confidence_map = sff_classify_cube(
-                normalized_cube, wavelengths_np, mineral_names=library.names
-            )
-        elif effective == "continuum_removal":
-            # Continuum-removed + VNIR/SWIR hierarchical SAM (CPU classical)
-            class_map, confidence_map = classify_cube_cr_sam(
-                abundance_cube_input,  # raw reflectance (not L2) for CR
-                abundance_refs,
-                wavelengths_np,
-                library.names,
-                valid_mask,
-                tile_size=options.tile_size,
-                sam_threshold_deg=options.sam_threshold_deg,
-                min_strength=options.min_confidence,
-            )
-            self._fill_nnls_abundances(
-                abundance_cube,
-                abundance_cube_input,
-                abundance_refs,
-                valid_mask,
-                mineral_count,
-                options.tile_size,
-            )
-        elif effective == "mtmf":
+        if effective == "mtmf":
             class_map, confidence_map, abundance_cube = self._classify_mtmf(
                 abundance_cube_input,
                 abundance_refs,
@@ -278,30 +240,6 @@ class OreMapper:
                 )
 
         return class_map, confidence_map, abundance_cube
-
-    @staticmethod
-    def _fill_nnls_abundances(
-        abundance_cube: NDArray[np.float32],
-        cube: NDArray[np.floating[Any]],
-        refs: NDArray[np.floating[Any]],
-        valid_mask: NDArray[np.bool_],
-        mineral_count: int,
-        tile_size: int,
-    ) -> None:
-        height, width, _ = cube.shape
-        for row0, row1, col0, col1 in iter_tiles(height, width, tile_size):
-            abundance_tile = cube[row0:row1, col0:col1, :]
-            tile_valid = valid_mask[row0:row1, col0:col1]
-            abundance_flat = abundance_tile.reshape(-1, abundance_tile.shape[2])
-            flat_valid = tile_valid.reshape(-1)
-            if not np.any(flat_valid):
-                continue
-            abundances = estimate_nnls_abundances(abundance_flat[flat_valid], refs)
-            tile_abund = np.zeros((flat_valid.shape[0], mineral_count), dtype=np.float32)
-            tile_abund[np.where(flat_valid)[0]] = abundances
-            abundance_cube[row0:row1, col0:col1, :] = tile_abund.reshape(
-                row1 - row0, col1 - col0, mineral_count
-            )
 
     @staticmethod
     def _classify_mtmf(
@@ -557,15 +495,12 @@ class OreMapper:
     def _effective_classifier(classifier: str, use_mtmf: bool = False) -> str:
         """Map requested classifier to what the pipeline actually runs."""
         name = (classifier or "sam").strip().lower().replace(" ", "_")
-        if name == "cr_sam":
-            name = "continuum_removal"
         if use_mtmf and name not in ("mtmf", "mnf_mtmf", "mnf_sam"):
             # Legacy flag: force MTMF when classifier is still the default SAM path
             return "mtmf"
         if name in (
             "sam",
-            "sff",
-            "continuum_removal",
+            "cr_sam",
             "mtmf",
             "mnf_sam",
             "mnf_mtmf",
@@ -579,8 +514,6 @@ class OreMapper:
     def _model_tag(effective: str) -> str:
         """Honest model_used fragment for the classifier that actually ran."""
         if effective in (
-            "sff",
-            "continuum_removal",
             "mtmf",
             "mnf_mtmf",
             "fuse_classical",
@@ -735,9 +668,4 @@ class OreMapper:
     def to_quality_response(report: RasterQualityReport) -> dict[str, Any]:
         return asdict(report)
 
-    def _coverage_warnings(self, wavelengths: list[float]) -> list[str]:
-        if max(wavelengths) < 1000.0:
-            return [
-                "Input does not include SWIR bands; clay, carbonate, and many alteration minerals cannot be mapped reliably"
-            ]
-        return []
+
