@@ -14,7 +14,7 @@ from .qc import RasterQualityReport, analyze_raster_quality
 from .rendering import class_map_png_data_url, confidence_png_data_url, class_statistics
 from .sam import angles_to_strength, compute_sam_angles
 from .schemas import MatchOptions, MatchResult
-from .library import SpectralLibrary, load_csv_library, load_demo_library, resample_library
+from .library import SpectralLibrary, load_csv_bytes, load_csv_library, load_demo_library, resample_library
 from .tiling import iter_tiles
 from .cr_sam import classify_cube_cr_sam
 from .mnf import apply_mnf, mnf_data_mean, mnf_transform
@@ -617,7 +617,11 @@ class SpectralMatcher:
         abundance_cube[~valid_mask] = 0.0
         return class_map, confidence_map, abundance_cube
 
+
     def _load_library(self, options: MatchOptions, wavelengths: list[float]) -> SpectralLibrary:
+        if options.spectral_library_bytes is not None:
+            library = load_csv_bytes(options.spectral_library_bytes, options.classes)
+            return resample_library(library, wavelengths)
         if options.spectral_library is not None:
             library = load_csv_library(options.spectral_library, options.classes)
             return resample_library(library, wavelengths)
@@ -626,7 +630,7 @@ class SpectralMatcher:
         real_names = [m for m in options.classes if not m.endswith("_demo")]
         if demo_names and real_names:
             raise ValueError(
-                "Cannot mix demo classes (*_demo) with real mineral names in one run. "
+                "Cannot mix demo classes (*_demo) with real class names in one run. "
                 "Use only demo names for plumbing tests, or provide --library / spectral_library "
                 "for real classes."
             )
@@ -634,13 +638,8 @@ class SpectralMatcher:
             library = load_demo_library(options.classes)
             return resample_library(library, wavelengths)
 
-        # Real class names: require explicit CSV. Do not silently use demo curves or
-        # cache files that may be synthetic Gaussians labeled as RELAB.
         raise ValueError(
-            "Authoritative spectra unavailable for real mineral names without a library CSV. "
-            "Provide spectral_library / --library pointing at dense VNIR–SWIR spectra "
-            "(e.g. benchmarks/demo_fixture/library.csv or a USGS-derived CSV). "
-            "Toy *_demo minerals are only for software plumbing tests."
+            "No spectral library provided. Supply --library <path.csv> or upload a library CSV."
         )
 
     def quality_file(

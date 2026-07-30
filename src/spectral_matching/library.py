@@ -53,11 +53,19 @@ def load_csv_library(path: str | Path, target_classes: list[str] | None) -> Spec
     rows_by_name: OrderedDict[str, list[tuple[float, float]]] = OrderedDict()
     with Path(path).open(newline="", encoding="utf-8") as handle:
         reader = csv.DictReader(handle)
-        required = {"name", "wavelength", "reflectance"}
-        if reader.fieldnames is None or not required.issubset(reader.fieldnames):
-            raise ValueError("Spectral library CSV requires columns: name, wavelength, reflectance")
+        fieldnames = reader.fieldnames
+        if fieldnames is None:
+            raise ValueError("Spectral library CSV requires columns: class, wavelength, reflectance")
+        has_name = "name" in fieldnames
+        has_class = "class" in fieldnames
+        if not has_name and not has_class:
+            raise ValueError("Spectral library CSV requires a 'class' (or 'name') column")
+        class_col = "class" if has_class else "name"
+        required = {class_col, "wavelength", "reflectance"}
+        if not required.issubset(fieldnames):
+            raise ValueError("Spectral library CSV requires columns: class, wavelength, reflectance")
         for row in reader:
-            name = (row.get("name") or "").strip()
+            name = (row.get(class_col) or "").strip()
             if not name:
                 raise ValueError("Spectral library rows require a class name")
             wavelength = _parse_finite_float(row.get("wavelength"), "wavelength")
@@ -117,11 +125,19 @@ def load_csv_bytes(data: bytes, target_classes: list[str] | None = None) -> Spec
     rows_by_name: OrderedDict[str, list[tuple[float, float]]] = OrderedDict()
     with io.TextIOWrapper(io.BytesIO(data), encoding="utf-8") as text_stream:
         reader = csv.DictReader(text_stream)
-        required = {"name", "wavelength", "reflectance"}
-        if reader.fieldnames is None or not required.issubset(reader.fieldnames):
-            raise ValueError("Spectral library CSV requires columns: name, wavelength, reflectance")
+        fieldnames = reader.fieldnames
+        if fieldnames is None:
+            raise ValueError("Spectral library CSV requires columns: class, wavelength, reflectance")
+        has_name = "name" in fieldnames
+        has_class = "class" in fieldnames
+        if not has_name and not has_class:
+            raise ValueError("Spectral library CSV requires a 'class' (or 'name') column")
+        class_col = "class" if has_class else "name"
+        required = {class_col, "wavelength", "reflectance"}
+        if not required.issubset(fieldnames):
+            raise ValueError("Spectral library CSV requires columns: class, wavelength, reflectance")
         for row in reader:
-            name = (row.get("name") or "").strip()
+            name = (row.get(class_col) or "").strip()
             if not name:
                 raise ValueError("Spectral library rows require a class name")
             wavelength = _parse_finite_float(row.get("wavelength"), "wavelength")

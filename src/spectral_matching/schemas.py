@@ -14,6 +14,7 @@ class MatchOptions:
         "epidote", "alunite", "gypsum",
     ])
     spectral_library: str | None = None
+    spectral_library_bytes: bytes | None = field(default=None, compare=False)  # in-memory CSV for API uploads
     sam_threshold_deg: float = 12.0
     min_confidence: float = 0.65
     tile_size: int = 128
