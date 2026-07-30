@@ -86,7 +86,7 @@ Docs:
 | [`docs/BEST_NUMBERS.md`](docs/BEST_NUMBERS.md) | Scoreboard Tracks A/B/C |
 | [`docs/research_scrapes/ADVERSARIAL_CONSENSUS.md`](docs/research_scrapes/ADVERSARIAL_CONSENSUS.md) | Binding claim language |
 | [`docs/research_scrapes/SUPERVISOR_GO_NOGO.md`](docs/research_scrapes/SUPERVISOR_GO_NOGO.md) | GO decision |
-| [`docs/DEMO_READINESS_PLAN.md`](docs/DEMO_READINESS_PLAN.md) | Demo checklist |
+| [`ROADMAP.md`](ROADMAP.md) | Development roadmap |
 
 ---
 
