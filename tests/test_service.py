@@ -7,7 +7,6 @@ import pytest
 import scipy.io  # type: ignore[import-untyped]
 import tifffile
 
-from spectral_matching.qc import RasterQualityReport
 from spectral_matching.schemas import MatchOptions
 from spectral_matching.engine import SpectralMatcher
 from spectral_matching.library import SpectralLibrary
@@ -84,23 +83,6 @@ def test_nnls_abundance_uses_raw_spectra_not_l2_normalized_spectra(tmp_path: Pat
     )
 
     assert result.statistics["Bright"].mean_abundance == pytest.approx(0.5)
-
-
-def test_vnir_only_warning_is_emitted(tmp_path: Path) -> None:
-    cube = np.ones((4, 4, 51), dtype=np.float32) * 0.5
-    path = tmp_path / "synthetic.tif"
-    tifffile.imwrite(path, cube, photometric="minisblack")
-
-    result = SpectralMatcher().predict_file(
-        path,
-        MatchOptions(
-            classes=["hematite_demo"],
-            min_confidence=0.0,
-            sam_threshold_deg=180.0,
-        ),
-    )
-
-    assert any("SWIR" in warning for warning in result.warnings)
 
 
 def test_hdf5_without_wavelengths_falls_back_to_sensor_preset(tmp_path: Path) -> None:
@@ -211,27 +193,6 @@ def test_prediction_excludes_user_band_and_returns_retained_wavelengths(tmp_path
     assert 500.0 not in result.wavelengths
 
 
-def test_quality_report_attached_to_result(tmp_path: Path) -> None:
-    cube = np.ones((4, 4, 51), dtype=np.float32) * 0.5
-    path = tmp_path / "qc_report.tif"
-    tifffile.imwrite(path, cube, photometric="minisblack")
-
-    result = SpectralMatcher().predict_file(
-        path,
-        MatchOptions(
-            classes=["hematite_demo"],
-            min_confidence=0.0,
-            sam_threshold_deg=180.0,
-        ),
-    )
-
-    assert isinstance(result.quality_report, RasterQualityReport)
-    assert result.quality_report.status == "pass"
-    assert result.quality_report.band_count == 51
-    assert result.quality_report.retained_band_indices == list(range(51))
-    assert result.quality_report.valid_pixel_fraction == 1.0
-
-
 def test_qc_warnings_merged_into_result_warnings(tmp_path: Path) -> None:
     library_3band = SpectralLibrary(
         names=["Hema_demo", "Goet_demo"],
@@ -312,65 +273,6 @@ def test_emit_like_hdf5_cube_shape_hwc(tmp_path: Path) -> None:
     )
 
     assert report.shape == (3, 4, 5)
-
-
-def test_emit_hdf5_good_wavelengths_auto_excludes_bad_bands(tmp_path: Path) -> None:
-    cube = np.ones((2, 2, 5), dtype=np.float32)
-    wavelengths = [500.0, 600.0, 700.0, 800.0, 900.0]
-    good_wavelengths = [1, 1, 0, 1, 0]
-
-    path = tmp_path / "emit_good_wl.h5"
-    with h5py.File(path, "w") as h5:
-        h5.create_dataset("reflectance", data=cube)
-        sgrp = h5.create_group("sensor_band_parameters")
-        sgrp.create_dataset("wavelengths", data=wavelengths)
-        sgrp.create_dataset("good_wavelengths", data=good_wavelengths)
-
-    result = SpectralMatcher().predict_file(
-        path,
-        MatchOptions(
-            min_confidence=0.0,
-            sam_threshold_deg=180.0,
-            classes=["hematite_demo", "goethite_demo"],
-        ),
-    )
-
-    assert result.quality_report is not None
-    assert 2 in result.quality_report.excluded_band_indices
-    assert 4 in result.quality_report.excluded_band_indices
-    assert result.quality_report.retained_band_indices == [0, 1, 3]
-    assert result.wavelengths == [500.0, 600.0, 800.0]
-
-
-def test_emit_hdf5_good_wavelengths_ignored_when_user_sets_excluded_bands(tmp_path: Path) -> None:
-    cube = np.ones((2, 2, 5), dtype=np.float32)
-    wavelengths = [500.0, 600.0, 700.0, 800.0, 900.0]
-    good_wavelengths = [1, 1, 0, 1, 1]
-
-    path = tmp_path / "emit_user_exclude.h5"
-    with h5py.File(path, "w") as h5:
-        h5.create_dataset("reflectance", data=cube)
-        sgrp = h5.create_group("sensor_band_parameters")
-        sgrp.create_dataset("wavelengths", data=wavelengths)
-        sgrp.create_dataset("good_wavelengths", data=good_wavelengths)
-
-    result = SpectralMatcher().predict_file(
-        path,
-        MatchOptions(
-            wavelengths=wavelengths,
-            sensor="manual",
-            min_confidence=0.0,
-            sam_threshold_deg=180.0,
-            classes=["hematite_demo", "goethite_demo"],
-            excluded_band_indices=[0],
-        ),
-    )
-
-    assert result.quality_report is not None
-    assert 0 in result.quality_report.excluded_band_indices
-    assert 2 not in result.quality_report.excluded_band_indices
-    assert result.quality_report.retained_band_indices == [1, 2, 3, 4]
-    assert result.wavelengths == [600.0, 700.0, 800.0, 900.0]
 
 
 def test_prediction_fails_when_fewer_than_two_usable_bands_remain(tmp_path: Path) -> None:

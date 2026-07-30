@@ -7,16 +7,25 @@ from spectral_matching.wavelengths import parse_wavelengths_text, resolve_wavele
 def test_default_options_are_public_demo_defaults() -> None:
     options = MatchOptions()
     assert options.sensor == "cubert_ultris_s5"
-    assert len(options.classes) >= 6  # minimum viable, could be DEFAULT_REAL_MINERALS
+    assert len(options.classes) >= 6
 
 
 def test_parse_manual_wavelengths_json() -> None:
     assert parse_wavelengths_text("[450, 500.5, 850]") == [450.0, 500.5, 850.0]
 
 
+def test_parse_empty_wavelengths_text() -> None:
+    assert parse_wavelengths_text("[]") == []
+
+
 def test_reject_non_increasing_wavelengths() -> None:
     with pytest.raises(ValueError, match="strictly increasing"):
         validate_wavelengths([500.0, 500.0, 450.0], expected_bands=3)
+
+
+def test_reject_band_count_mismatch() -> None:
+    with pytest.raises(ValueError, match="Expected 4 wavelengths"):
+        validate_wavelengths([400.0, 500.0, 600.0], expected_bands=4)
 
 
 def test_cubert_preset_has_51_bands() -> None:

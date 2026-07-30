@@ -36,4 +36,10 @@ def test_auto_classifier_in_match_options(tmp_path) -> None:
         sensor="manual",
     )
     assert result.status == "success"
-    assert "sam" in result.model_used or "auto" in result.warnings[0] if result.warnings else True
+    assert result.model_used != ""
+
+
+def test_auto_edge_empty_classes() -> None:
+    result = SpectralMatcher._auto_classifier(n_classes=0, n_bands=10)
+    assert isinstance(result, str)
+    assert len(result) > 0

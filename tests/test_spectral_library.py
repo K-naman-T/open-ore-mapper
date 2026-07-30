@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from pathlib import Path
 
 import numpy as np
@@ -44,3 +46,17 @@ def test_rejects_non_increasing_csv_wavelengths(tmp_path: Path) -> None:
     )
     with pytest.raises(ValueError, match="strictly increasing"):
         load_csv_library(path, ["hematite_demo"])
+
+
+def test_resample_single_wavelength() -> None:
+    library = load_demo_library(["hematite_demo", "goethite_demo"])
+    resampled = resample_library(library, [550.0])
+    assert resampled.spectra.shape == (2, 1)
+    assert resampled.wavelengths.tolist() == [550.0]
+
+
+def test_resample_out_of_range_wavelength_clips_to_endpoint() -> None:
+    library = load_demo_library(["hematite_demo"])
+    resampled = resample_library(library, [9999.0])
+    assert resampled.spectra.shape == (1, 1)
+    assert np.isfinite(resampled.spectra[0, 0])
