@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from open_ore_mapper.mtmf import estimate_background_stats, mtmf, mtmf_detect
+from spectral_matching.mtmf import estimate_background_stats, mtmf, mtmf_detect
 
 
 def test_mtmf_exact_target_returns_mf_one_infeas_zero() -> None:

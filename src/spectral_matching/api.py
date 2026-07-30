@@ -6,8 +6,8 @@ from typing import Any, Union
 from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.responses import JSONResponse
 
-from .schemas import MapperOptions
-from .service import OreMapper
+from .schemas import MatchOptions
+from .engine import SpectralMatcher
 
 
 logger = logging.getLogger(__name__)
@@ -57,7 +57,7 @@ async def qc_raster(
         return _bad_request("Uploaded file is empty")
     try:
         mapper_options = _parse_options(options)
-        mapper = OreMapper()
+        mapper = SpectralMatcher()
         report = mapper.quality_bytes(
             file_bytes, file.filename or "upload.tif", mapper_options
         )
@@ -80,7 +80,7 @@ async def predict(
         return _bad_request("Uploaded file is empty")
     try:
         mapper_options = _parse_options(options)
-        mapper = OreMapper()
+        mapper = SpectralMatcher()
         result = mapper.predict_bytes(
             file_bytes, file.filename or "upload.tif", mapper_options
         )
@@ -91,7 +91,7 @@ async def predict(
         return _bad_request(str(exc))
 
 
-def _parse_options(options_text: str) -> MapperOptions:
+def _parse_options(options_text: str) -> MatchOptions:
     try:
         raw = json.loads(options_text or "{}")
     except json.JSONDecodeError as exc:
@@ -100,7 +100,7 @@ def _parse_options(options_text: str) -> MapperOptions:
         raise ValueError("options must be a JSON object")
 
     wavelengths = _optional_float_list(raw.get("wavelengths"), "wavelengths")
-    minerals = _string_list(raw.get("minerals", []), "minerals")
+    classes = _string_list(raw.get("classes", raw.get("minerals", [])), "classes")
     if raw.get("spectral_library") is not None:
         raise ValueError(
             "API spectral_library paths are not supported; use the CLI --library option or a future multipart library upload"
@@ -116,10 +116,10 @@ def _parse_options(options_text: str) -> MapperOptions:
                 raise ValueError("excluded_band_indices must contain only integers")
         excluded = list(val)
 
-    return MapperOptions(
+    return MatchOptions(
         wavelengths=wavelengths,
         sensor=str(raw.get("sensor", "cubert_ultris_s5")),
-        minerals=minerals if minerals else [],
+        classes=classes if classes else [],
         spectral_library=None,
         sam_threshold_deg=float(raw.get("sam_threshold_deg", 12.0)),
         min_confidence=float(raw.get("min_confidence", 0.65)),

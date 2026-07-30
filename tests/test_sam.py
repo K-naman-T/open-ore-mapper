@@ -1,6 +1,6 @@
 import numpy as np
 
-from open_ore_mapper.sam import angles_to_strength, compute_sam_angles, compute_sam_cube
+from spectral_matching.sam import angles_to_strength, compute_sam_angles, compute_sam_cube
 
 
 def test_identical_spectra_have_zero_angle() -> None:

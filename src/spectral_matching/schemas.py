@@ -5,10 +5,10 @@ from typing import Any
 
 
 @dataclass(frozen=True)
-class MapperOptions:
+class MatchOptions:
     wavelengths: list[float] | None = None
     sensor: str = "cubert_ultris_s5"
-    minerals: list[str] = field(default_factory=lambda: [
+    classes: list[str] = field(default_factory=lambda: [
         "hematite", "goethite", "jarosite", "kaolinite", "montmorillonite",
         "illite", "calcite", "dolomite", "muscovite", "chlorite",
         "epidote", "alunite", "gypsum", "magnetite",
@@ -29,7 +29,7 @@ class MapperOptions:
 
 
 @dataclass(frozen=True)
-class MineralStatistics:
+class ClassStatistics:
     count: int
     percentage: float
     mean_confidence: float
@@ -37,15 +37,15 @@ class MineralStatistics:
 
 
 @dataclass(frozen=True)
-class MapperResult:
+class MatchResult:
     status: str
     model_used: str
     sensor: str
     wavelengths: list[float]
-    minerals: list[str]
+    classes: list[str]
     output_image: str
     confidence_image: str
     top_abundance_image: str
-    statistics: dict[str, MineralStatistics]
+    statistics: dict[str, ClassStatistics]
     warnings: list[str]
     downloads: dict[str, Any]

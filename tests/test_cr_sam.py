@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from open_ore_mapper.cr_sam import (
+from spectral_matching.cr_sam import (
     classify_cr_sam,
     linear_continuum_remove,
 )

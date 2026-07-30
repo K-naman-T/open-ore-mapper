@@ -7,8 +7,8 @@ from pathlib import Path
 import numpy as np
 import tifffile
 
-from open_ore_mapper.schemas import MapperOptions
-from open_ore_mapper.service import OreMapper, UNKNOWN_CLASS
+from spectral_matching.schemas import MatchOptions
+from spectral_matching.engine import SpectralMatcher, UNKNOWN_CLASS
 
 
 def _write_library_csv(path: Path, names: list[str], wavelengths: list[float]) -> None:
@@ -60,12 +60,12 @@ def _synthetic_scene(
 
 def test_classifier_fuse_classical_model_used(tmp_path: Path) -> None:
     scene, lib, wls, names = _synthetic_scene(tmp_path)
-    result = OreMapper().predict_file(
+    result = SpectralMatcher().predict_file(
         scene,
-        MapperOptions(
+        MatchOptions(
             wavelengths=wls,
             sensor="manual",
-            minerals=names,
+            classes=names,
             spectral_library=str(lib),
             classifier="fuse_classical",
             n_mnf_components=8,
@@ -76,17 +76,17 @@ def test_classifier_fuse_classical_model_used(tmp_path: Path) -> None:
     )
     assert result.status == "success"
     assert result.model_used == "library_fuse_classical_v1"
-    assert set(result.minerals) == set(names)
+    assert set(result.classes) == set(names)
 
 
 def test_classifier_mtmf_model_used(tmp_path: Path) -> None:
     scene, lib, wls, names = _synthetic_scene(tmp_path)
-    result = OreMapper().predict_file(
+    result = SpectralMatcher().predict_file(
         scene,
-        MapperOptions(
+        MatchOptions(
             wavelengths=wls,
             sensor="manual",
-            minerals=names,
+            classes=names,
             spectral_library=str(lib),
             classifier="mtmf",
             mf_threshold=0.05,
@@ -96,17 +96,17 @@ def test_classifier_mtmf_model_used(tmp_path: Path) -> None:
     )
     assert result.status == "success"
     assert result.model_used == "library_mtmf_v1"
-    assert result.minerals == names
+    assert result.classes == names
 
 
 def test_classifier_mnf_sam_model_used(tmp_path: Path) -> None:
     scene, lib, wls, names = _synthetic_scene(tmp_path)
-    result = OreMapper().predict_file(
+    result = SpectralMatcher().predict_file(
         scene,
-        MapperOptions(
+        MatchOptions(
             wavelengths=wls,
             sensor="manual",
-            minerals=names,
+            classes=names,
             spectral_library=str(lib),
             classifier="mnf_sam",
             n_mnf_components=8,
@@ -121,12 +121,12 @@ def test_classifier_mnf_sam_model_used(tmp_path: Path) -> None:
 
 def test_classifier_mnf_mtmf_model_used(tmp_path: Path) -> None:
     scene, lib, wls, names = _synthetic_scene(tmp_path)
-    result = OreMapper().predict_file(
+    result = SpectralMatcher().predict_file(
         scene,
-        MapperOptions(
+        MatchOptions(
             wavelengths=wls,
             sensor="manual",
-            minerals=names,
+            classes=names,
             spectral_library=str(lib),
             classifier="mnf_mtmf",
             n_mnf_components=8,
@@ -141,11 +141,11 @@ def test_classifier_mnf_mtmf_model_used(tmp_path: Path) -> None:
 
 def test_classify_core_mtmf_assigns_known_pixels(tmp_path: Path) -> None:
     scene, lib, wls, names = _synthetic_scene(tmp_path, height=10, width=10, n_bands=20)
-    om = OreMapper()
-    opts = MapperOptions(
+    om = SpectralMatcher()
+    opts = MatchOptions(
         wavelengths=wls,
         sensor="manual",
-        minerals=names,
+        classes=names,
         spectral_library=str(lib),
         classifier="mtmf",
         mf_threshold=0.1,
@@ -167,11 +167,11 @@ def test_classify_core_mtmf_assigns_known_pixels(tmp_path: Path) -> None:
 
 def test_classify_core_mnf_sam_no_crash(tmp_path: Path) -> None:
     scene, lib, wls, names = _synthetic_scene(tmp_path)
-    om = OreMapper()
-    opts = MapperOptions(
+    om = SpectralMatcher()
+    opts = MatchOptions(
         wavelengths=wls,
         sensor="manual",
-        minerals=names,
+        classes=names,
         spectral_library=str(lib),
         classifier="mnf_sam",
         n_mnf_components=6,
@@ -190,10 +190,10 @@ def test_classify_core_mnf_sam_no_crash(tmp_path: Path) -> None:
 
 
 def test_effective_classifier_aliases() -> None:
-    assert OreMapper._effective_classifier("MTMF") == "mtmf"
-    assert OreMapper._effective_classifier("mnf_sam") == "mnf_sam"
-    assert OreMapper._effective_classifier("mnf_mtmf") == "mnf_mtmf"
-    assert OreMapper._effective_classifier("cr_sam") == "continuum_removal"
-    assert OreMapper._effective_classifier("sam", use_mtmf=True) == "mtmf"
-    assert OreMapper._effective_classifier("unknown_thing") == "sam"
-    assert OreMapper._effective_classifier("continuum_removal") == "continuum_removal"
+    assert SpectralMatcher._effective_classifier("MTMF") == "mtmf"
+    assert SpectralMatcher._effective_classifier("mnf_sam") == "mnf_sam"
+    assert SpectralMatcher._effective_classifier("mnf_mtmf") == "mnf_mtmf"
+    assert SpectralMatcher._effective_classifier("cr_sam") == "continuum_removal"
+    assert SpectralMatcher._effective_classifier("sam", use_mtmf=True) == "mtmf"
+    assert SpectralMatcher._effective_classifier("unknown_thing") == "sam"
+    assert SpectralMatcher._effective_classifier("continuum_removal") == "continuum_removal"

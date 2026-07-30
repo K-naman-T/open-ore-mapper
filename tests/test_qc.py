@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from open_ore_mapper.qc import analyze_raster_quality
+from spectral_matching.qc import analyze_raster_quality
 
 
 def test_pass_case_all_bands_valid() -> None:

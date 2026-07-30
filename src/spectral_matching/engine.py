@@ -11,10 +11,10 @@ import tifffile
 
 from .preprocessing import ensure_hwc, normalize_cube, select_bands, valid_pixel_mask
 from .qc import RasterQualityReport, analyze_raster_quality
-from .rendering import class_map_png_data_url, confidence_png_data_url, mineral_statistics
+from .rendering import class_map_png_data_url, confidence_png_data_url, class_statistics
 from .sam import angles_to_strength, compute_sam_angles
-from .schemas import MapperOptions, MapperResult
-from .spectral_library import SpectralLibrary, load_csv_library, load_demo_library, resample_library
+from .schemas import MatchOptions, MatchResult
+from .library import SpectralLibrary, load_csv_library, load_demo_library, resample_library
 from .tiling import iter_tiles
 from .cr_sam import classify_cube_cr_sam
 from .mnf import apply_mnf, mnf_data_mean, mnf_transform
@@ -54,19 +54,19 @@ def _mat_ensure_hwc(arr: np.ndarray, band_count_hint: int | None = None) -> np.n
     return np.moveaxis(arr, 0, -1).astype(np.float32, copy=False)
 
 
-class OreMapper:
-    def predict_file(self, path: str | Path, options: MapperOptions | None = None) -> MapperResult:
+class SpectralMatcher:
+    def predict_file(self, path: str | Path, options: MatchOptions | None = None) -> MatchResult:
         file_path = Path(path)
-        return self.predict_bytes(file_path.read_bytes(), file_path.name, options or MapperOptions())
+        return self.predict_bytes(file_path.read_bytes(), file_path.name, options or MatchOptions())
 
     def predict_bytes(
         self,
         file_bytes: bytes,
         filename: str,
-        options: MapperOptions | None = None,
-    ) -> MapperResult:
-        selected_options = options or MapperOptions()
-        if not selected_options.minerals:
+        options: MatchOptions | None = None,
+    ) -> MatchResult:
+        selected_options = options or MatchOptions()
+        if not selected_options.classes:
             raise ValueError("At least one mineral is required")
 
         band_count_hint = (
@@ -88,10 +88,10 @@ class OreMapper:
         self,
         cube: NDArray[np.floating[Any]],
         wavelengths: list[float],
-        options: MapperOptions | None = None,
+        options: MatchOptions | None = None,
         sensor: str = "manual",
-    ) -> MapperResult:
-        selected_options = options or MapperOptions()
+    ) -> MatchResult:
+        selected_options = options or MatchOptions()
 
         report = analyze_raster_quality(
             cube,
@@ -127,16 +127,16 @@ class OreMapper:
                     f"ran {effective!r} instead"
                 )
         model_tag = self._model_tag(effective)
-        return MapperResult(
+        return MatchResult(
             status="success",
             model_used=f"library_{model_tag}_v1",
             sensor=sensor,
             wavelengths=retained_wls,
-            minerals=library.names,
+            classes=library.names,
             output_image=class_map_png_data_url(class_map, library.names),
             confidence_image=confidence_png_data_url(confidence_map),
             top_abundance_image=confidence_png_data_url(top_abundance),
-            statistics=mineral_statistics(class_map, confidence_map, abundance_cube, library.names),
+            statistics=class_statistics(class_map, confidence_map, abundance_cube, library.names),
             warnings=all_warnings,
             downloads={},
 
@@ -147,7 +147,7 @@ class OreMapper:
         cube: NDArray[np.floating[Any]],
         wavelengths: list[float],
         library: SpectralLibrary,
-        options: MapperOptions,
+        options: MatchOptions,
     ) -> tuple[NDArray[np.uint8], NDArray[np.float32], NDArray[np.float32]]:
         valid_mask = valid_pixel_mask(cube)
         normalized_cube = normalize_cube(cube, options.normalization)
@@ -246,7 +246,7 @@ class OreMapper:
         cube: NDArray[np.floating[Any]],
         refs: NDArray[np.floating[Any]],
         valid_mask: NDArray[np.bool_],
-        options: MapperOptions,
+        options: MatchOptions,
         mineral_count: int,
     ) -> tuple[NDArray[np.uint8], NDArray[np.float32], NDArray[np.float32]]:
         """Mixture-Tuned Matched Filter multi-class assignment.
@@ -292,7 +292,7 @@ class OreMapper:
         cube: NDArray[np.floating[Any]],
         refs: NDArray[np.floating[Any]],
         valid_mask: NDArray[np.bool_],
-        options: MapperOptions,
+        options: MatchOptions,
         mineral_count: int,
     ) -> tuple[NDArray[np.uint8], NDArray[np.float32], NDArray[np.float32]]:
         """MNF-whiten cube + library, then SAM angles with light NNLS on original spectra.
@@ -358,7 +358,7 @@ class OreMapper:
         cube: NDArray[np.floating[Any]],
         refs: NDArray[np.floating[Any]],
         valid_mask: NDArray[np.bool_],
-        options: MapperOptions,
+        options: MatchOptions,
         mineral_count: int,
     ) -> tuple[NDArray[np.uint8], NDArray[np.float32], NDArray[np.float32]]:
         """Fused path: MNF transform of cube + library, then MTMF in reduced space.
@@ -375,11 +375,11 @@ class OreMapper:
         mu = mnf_data_mean(cube_f, valid_mask)
         refs_mnf = apply_mnf(refs_f, tmat, data_mean=mu)
 
-        return OreMapper._classify_mtmf(
+        return SpectralMatcher._classify_mtmf(
             mnf_cube, refs_mnf, valid_mask, options, mineral_count
         )
 
-    def to_response(self, result: MapperResult) -> dict[str, Any]:
+    def to_response(self, result: MatchResult) -> dict[str, Any]:
         response = asdict(result)
         response["statistics"] = {name: asdict(stats) for name, stats in result.statistics.items()}
         return response
@@ -481,7 +481,7 @@ class OreMapper:
 
     def _resolve_wavelengths(
         self,
-        options: MapperOptions,
+        options: MatchOptions,
         expected_bands: int,
         embedded_wavelengths: list[float] | None = None,
     ) -> tuple[list[float], str]:
@@ -530,7 +530,7 @@ class OreMapper:
         wavelengths: NDArray[np.floating[Any]],
         mineral_names: list[str],
         valid_mask: NDArray[np.bool_],
-        options: MapperOptions,
+        options: MatchOptions,
         mineral_count: int,
     ) -> tuple[NDArray[np.uint8], NDArray[np.float32], NDArray[np.float32]]:
         """Soft fusion of MTMF + CR-region SAM + MNF-SAM (CPU classical ensemble).
@@ -604,13 +604,13 @@ class OreMapper:
         abundance_cube[~valid_mask] = 0.0
         return class_map, confidence_map, abundance_cube
 
-    def _load_library(self, options: MapperOptions, wavelengths: list[float]) -> SpectralLibrary:
+    def _load_library(self, options: MatchOptions, wavelengths: list[float]) -> SpectralLibrary:
         if options.spectral_library is not None:
-            library = load_csv_library(options.spectral_library, options.minerals)
+            library = load_csv_library(options.spectral_library, options.classes)
             return resample_library(library, wavelengths)
 
-        demo_names = [m for m in options.minerals if m.endswith("_demo")]
-        real_names = [m for m in options.minerals if not m.endswith("_demo")]
+        demo_names = [m for m in options.classes if m.endswith("_demo")]
+        real_names = [m for m in options.classes if not m.endswith("_demo")]
         if demo_names and real_names:
             raise ValueError(
                 "Cannot mix demo minerals (*_demo) with real mineral names in one run. "
@@ -618,7 +618,7 @@ class OreMapper:
                 "for real minerals."
             )
         if demo_names and not real_names:
-            library = load_demo_library(options.minerals)
+            library = load_demo_library(options.classes)
             return resample_library(library, wavelengths)
 
         # Real mineral names: require explicit CSV. Do not silently use demo curves or
@@ -631,7 +631,7 @@ class OreMapper:
         )
 
     def quality_file(
-        self, path: str | Path, options: MapperOptions | None = None
+        self, path: str | Path, options: MatchOptions | None = None
     ) -> RasterQualityReport:
         file_path = Path(path)
         return self.quality_bytes(file_path.read_bytes(), file_path.name, options)
@@ -640,9 +640,9 @@ class OreMapper:
         self,
         file_bytes: bytes,
         filename: str,
-        options: MapperOptions | None = None,
+        options: MatchOptions | None = None,
     ) -> RasterQualityReport:
-        selected_options = options or MapperOptions()
+        selected_options = options or MatchOptions()
         band_count_hint = (
             len(selected_options.wavelengths) if selected_options.wavelengths is not None else None
         )

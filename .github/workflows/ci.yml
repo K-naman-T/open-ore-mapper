@@ -18,7 +18,7 @@ jobs:
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -e '.[dev,api]'
       - run: ruff check .
-      - run: mypy src/open_ore_mapper
+      - run: mypy src/spectral_matching
       - run: python -m pytest -v --ignore=tests/test_e2e_mineral_detection.py --ignore=tests/test_emit_client.py
 
   backend-extras:

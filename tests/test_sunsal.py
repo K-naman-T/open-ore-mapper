@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from open_ore_mapper.sunsal import should_use_sunsal, sunsal
+from spectral_matching.sunsal import should_use_sunsal, sunsal
 
 
 def test_sunsal_pure_pixel_returns_sparse_solution() -> None:

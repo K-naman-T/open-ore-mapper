@@ -42,7 +42,7 @@ def validate_tile_coords(z: int, x: int, y: int) -> None:
 def write_tiles(
     class_map: NDArray[np.uint8],
     confidence: NDArray[np.float32],
-    minerals: list[str],
+    classes: list[str],
     map_uuid: str,
     bbox: tuple[float, float, float, float],
     tiles_dir: Path | None = None,
@@ -65,7 +65,7 @@ def write_tiles(
         "min_zoom": 0,
         "max_zoom": max_zoom,
         "tile_size": TILE_SIZE,
-        "minerals": minerals,
+        "classes": classes,
         "scene_shape": [H, W],
     }
 
@@ -90,7 +90,7 @@ def write_tiles(
                 cm_slice = class_map[y_start:y_end, x_start:x_end]
                 conf_slice = confidence[y_start:y_end, x_start:x_end]
 
-                tile = _render_tile(cm_slice, conf_slice, minerals)
+                tile = _render_tile(cm_slice, conf_slice, classes)
                 tile.save(str(x_dir / f"{ty}.png"))
 
     meta_path = tile_root / "metadata.json"
@@ -140,11 +140,11 @@ def get_tile_metadata(map_uuid: str, tiles_dir: Path | None = None) -> dict[str,
 def _render_tile(
     class_map_slice: NDArray[np.uint8],
     confidence_slice: NDArray[np.float32],
-    minerals: list[str],
+    classes: list[str],
 ) -> Image.Image:
     h, w = class_map_slice.shape[:2]
     rgb = np.full((h, w, 3), UNKNOWN_COLOR, dtype=np.uint8)
-    for idx in range(len(minerals)):
+    for idx in range(len(classes)):
         mask = class_map_slice == idx
         rgb[mask] = CLASS_COLORS[idx % len(CLASS_COLORS)]
 

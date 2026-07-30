@@ -7,10 +7,10 @@ import pytest
 import scipy.io  # type: ignore[import-untyped]
 import tifffile
 
-from open_ore_mapper.qc import RasterQualityReport
-from open_ore_mapper.schemas import MapperOptions
-from open_ore_mapper.service import OreMapper
-from open_ore_mapper.spectral_library import SpectralLibrary
+from spectral_matching.qc import RasterQualityReport
+from spectral_matching.schemas import MatchOptions
+from spectral_matching.engine import SpectralMatcher
+from spectral_matching.library import SpectralLibrary
 
 
 def test_predict_file_on_synthetic_cubert_like_tiff(tmp_path: Path) -> None:
@@ -19,11 +19,11 @@ def test_predict_file_on_synthetic_cubert_like_tiff(tmp_path: Path) -> None:
     path = tmp_path / "synthetic.tif"
     tifffile.imwrite(path, cube, photometric="minisblack")
 
-    result = OreMapper().predict_file(
+    result = SpectralMatcher().predict_file(
         path,
-        MapperOptions(
+        MatchOptions(
             sensor="cubert_ultris_s5",
-            minerals=["hematite_demo", "goethite_demo"],
+            classes=["hematite_demo", "goethite_demo"],
             tile_size=4,
             min_confidence=0.0,
             sam_threshold_deg=180.0,
@@ -32,7 +32,7 @@ def test_predict_file_on_synthetic_cubert_like_tiff(tmp_path: Path) -> None:
 
     assert result.status == "success"
     assert result.model_used == "library_sam_nnls_v1"
-    assert result.minerals == ["hematite_demo", "goethite_demo"]
+    assert result.classes == ["hematite_demo", "goethite_demo"]
     assert result.output_image.startswith("data:image/png;base64,")
     assert "hematite_demo" in result.statistics
 
@@ -42,10 +42,10 @@ def test_default_options_use_cubert_wavelength_preset(tmp_path: Path) -> None:
     path = tmp_path / "synthetic.tif"
     tifffile.imwrite(path, cube, photometric="minisblack")
 
-    result = OreMapper().predict_file(
+    result = SpectralMatcher().predict_file(
         path,
-        MapperOptions(
-            minerals=["hematite_demo"],
+        MatchOptions(
+            classes=["hematite_demo"],
             min_confidence=0.0,
             sam_threshold_deg=180.0,
         ),
@@ -70,12 +70,12 @@ def test_nnls_abundance_uses_raw_spectra_not_l2_normalized_spectra(tmp_path: Pat
         "Dim,600,1.0\n"
     )
 
-    result = OreMapper().predict_file(
+    result = SpectralMatcher().predict_file(
         path,
-        MapperOptions(
+        MatchOptions(
             wavelengths=[500.0, 600.0],
             sensor="manual",
-            minerals=["Bright", "Dim"],
+            classes=["Bright", "Dim"],
             spectral_library=str(csv_path),
             sam_threshold_deg=180.0,
             min_confidence=0.0,
@@ -91,10 +91,10 @@ def test_vnir_only_warning_is_emitted(tmp_path: Path) -> None:
     path = tmp_path / "synthetic.tif"
     tifffile.imwrite(path, cube, photometric="minisblack")
 
-    result = OreMapper().predict_file(
+    result = SpectralMatcher().predict_file(
         path,
-        MapperOptions(
-            minerals=["hematite_demo"],
+        MatchOptions(
+            classes=["hematite_demo"],
             min_confidence=0.0,
             sam_threshold_deg=180.0,
         ),
@@ -109,11 +109,11 @@ def test_hdf5_without_wavelengths_falls_back_to_sensor_preset(tmp_path: Path) ->
     with h5py.File(path, "w") as h5:
         h5.create_dataset("hdr", data=cube)
 
-    result = OreMapper().predict_file(
+    result = SpectralMatcher().predict_file(
         path,
-        MapperOptions(
+        MatchOptions(
             sensor="cubert_ultris_s5",
-            minerals=["hematite_demo", "goethite_demo"],
+            classes=["hematite_demo", "goethite_demo"],
             min_confidence=0.0,
             sam_threshold_deg=180.0,
         ),
@@ -128,12 +128,12 @@ def test_hdf5_without_wavelengths_falls_back_to_manual_wavelengths(tmp_path: Pat
     with h5py.File(path, "w") as h5:
         h5.create_dataset("hdr", data=cube)
 
-    result = OreMapper().predict_file(
+    result = SpectralMatcher().predict_file(
         path,
-        MapperOptions(
+        MatchOptions(
             wavelengths=[400.0, 500.0, 600.0],
             sensor="manual",
-            minerals=["hematite_demo", "goethite_demo"],
+            classes=["hematite_demo", "goethite_demo"],
             min_confidence=0.0,
             sam_threshold_deg=180.0,
         ),
@@ -154,12 +154,12 @@ def test_hdf5_embedded_wavelengths(tmp_path: Path) -> None:
         h5.create_dataset("hdr", data=cube)
         h5.create_dataset("wavelengths", data=wavelengths)
 
-    result = OreMapper().predict_file(
+    result = SpectralMatcher().predict_file(
         path,
-        MapperOptions(
+        MatchOptions(
             min_confidence=0.0,
             sam_threshold_deg=180.0,
-            minerals=["hematite_demo", "goethite_demo"],
+            classes=["hematite_demo", "goethite_demo"],
         ),
     )
 
@@ -169,7 +169,7 @@ def test_hdf5_embedded_wavelengths(tmp_path: Path) -> None:
 
 def test_predict_bytes_rejects_unsupported_extension() -> None:
     with pytest.raises(ValueError, match="Supported inputs"):
-        OreMapper().predict_bytes(b"not a cube", "scene.txt", MapperOptions())
+        SpectralMatcher().predict_bytes(b"not a cube", "scene.txt", MatchOptions())
 
 
 def test_prediction_excludes_user_band_and_returns_retained_wavelengths(tmp_path: Path) -> None:
@@ -184,8 +184,8 @@ def test_prediction_excludes_user_band_and_returns_retained_wavelengths(tmp_path
     tifffile.imwrite(path, cube, photometric="minisblack")
 
     with (
-        patch("open_ore_mapper.service.load_demo_library", return_value=library_3band),
-        patch("open_ore_mapper.service.resample_library") as mock_resample,
+        patch("spectral_matching.engine.load_demo_library", return_value=library_3band),
+        patch("spectral_matching.engine.resample_library") as mock_resample,
     ):
         mock_resample.return_value = SpectralLibrary(
             names=["Hema_demo", "Goet_demo"],
@@ -194,12 +194,12 @@ def test_prediction_excludes_user_band_and_returns_retained_wavelengths(tmp_path
             source="synthetic",
         )
 
-        result = OreMapper().predict_file(
+        result = SpectralMatcher().predict_file(
             path,
-            MapperOptions(
+            MatchOptions(
                 wavelengths=[400.0, 500.0, 600.0],
                 sensor="manual",
-                minerals=["Hema_demo", "Goet_demo"],
+                classes=["Hema_demo", "Goet_demo"],
                 excluded_band_indices=[1],
                 sam_threshold_deg=180.0,
                 min_confidence=0.0,
@@ -216,10 +216,10 @@ def test_quality_report_attached_to_result(tmp_path: Path) -> None:
     path = tmp_path / "qc_report.tif"
     tifffile.imwrite(path, cube, photometric="minisblack")
 
-    result = OreMapper().predict_file(
+    result = SpectralMatcher().predict_file(
         path,
-        MapperOptions(
-            minerals=["hematite_demo"],
+        MatchOptions(
+            classes=["hematite_demo"],
             min_confidence=0.0,
             sam_threshold_deg=180.0,
         ),
@@ -244,8 +244,8 @@ def test_qc_warnings_merged_into_result_warnings(tmp_path: Path) -> None:
     tifffile.imwrite(path, cube, photometric="minisblack")
 
     with (
-        patch("open_ore_mapper.service.load_demo_library", return_value=library_3band),
-        patch("open_ore_mapper.service.resample_library") as mock_resample,
+        patch("spectral_matching.engine.load_demo_library", return_value=library_3band),
+        patch("spectral_matching.engine.resample_library") as mock_resample,
     ):
         mock_resample.return_value = SpectralLibrary(
             names=["Hema_demo", "Goet_demo"],
@@ -254,12 +254,12 @@ def test_qc_warnings_merged_into_result_warnings(tmp_path: Path) -> None:
             source="synthetic",
         )
 
-        result = OreMapper().predict_file(
+        result = SpectralMatcher().predict_file(
             path,
-            MapperOptions(
+            MatchOptions(
                 wavelengths=[400.0, 500.0, 600.0],
                 sensor="manual",
-                minerals=["Hema_demo", "Goet_demo"],
+                classes=["Hema_demo", "Goet_demo"],
                 excluded_band_indices=[1],
                 sam_threshold_deg=180.0,
                 min_confidence=0.0,
@@ -281,12 +281,12 @@ def test_emit_like_hdf5_loads_reflectance_dataset(tmp_path: Path) -> None:
         sgrp = h5.create_group("sensor_band_parameters")
         sgrp.create_dataset("wavelengths", data=wavelengths)
 
-    result = OreMapper().predict_file(
+    result = SpectralMatcher().predict_file(
         path,
-        MapperOptions(
+        MatchOptions(
             min_confidence=0.0,
             sam_threshold_deg=180.0,
-            minerals=["hematite_demo", "goethite_demo"],
+            classes=["hematite_demo", "goethite_demo"],
         ),
     )
 
@@ -305,10 +305,10 @@ def test_emit_like_hdf5_cube_shape_hwc(tmp_path: Path) -> None:
         sgrp = h5.create_group("sensor_band_parameters")
         sgrp.create_dataset("wavelengths", data=wavelengths)
 
-    mapper = OreMapper()
+    mapper = SpectralMatcher()
     report = mapper.quality_file(
         path,
-        MapperOptions(wavelengths=wavelengths, sensor="manual"),
+        MatchOptions(wavelengths=wavelengths, sensor="manual"),
     )
 
     assert report.shape == (3, 4, 5)
@@ -326,12 +326,12 @@ def test_emit_hdf5_good_wavelengths_auto_excludes_bad_bands(tmp_path: Path) -> N
         sgrp.create_dataset("wavelengths", data=wavelengths)
         sgrp.create_dataset("good_wavelengths", data=good_wavelengths)
 
-    result = OreMapper().predict_file(
+    result = SpectralMatcher().predict_file(
         path,
-        MapperOptions(
+        MatchOptions(
             min_confidence=0.0,
             sam_threshold_deg=180.0,
-            minerals=["hematite_demo", "goethite_demo"],
+            classes=["hematite_demo", "goethite_demo"],
         ),
     )
 
@@ -354,14 +354,14 @@ def test_emit_hdf5_good_wavelengths_ignored_when_user_sets_excluded_bands(tmp_pa
         sgrp.create_dataset("wavelengths", data=wavelengths)
         sgrp.create_dataset("good_wavelengths", data=good_wavelengths)
 
-    result = OreMapper().predict_file(
+    result = SpectralMatcher().predict_file(
         path,
-        MapperOptions(
+        MatchOptions(
             wavelengths=wavelengths,
             sensor="manual",
             min_confidence=0.0,
             sam_threshold_deg=180.0,
-            minerals=["hematite_demo", "goethite_demo"],
+            classes=["hematite_demo", "goethite_demo"],
             excluded_band_indices=[0],
         ),
     )
@@ -379,12 +379,12 @@ def test_prediction_fails_when_fewer_than_two_usable_bands_remain(tmp_path: Path
     tifffile.imwrite(path, cube, photometric="minisblack")
 
     with pytest.raises(ValueError, match="At least two usable spectral bands"):
-        OreMapper().predict_file(
+        SpectralMatcher().predict_file(
             path,
-            MapperOptions(
+            MatchOptions(
                 wavelengths=[400.0, 500.0],
                 sensor="manual",
-                minerals=["Hema", "Goet"],
+                classes=["Hema", "Goet"],
                 excluded_band_indices=[0],
                 sam_threshold_deg=180.0,
                 min_confidence=0.0,
@@ -398,12 +398,12 @@ def test_mat_file_predict(tmp_path: Path) -> None:
     mat_path = tmp_path / "scene.mat"
     scipy.io.savemat(mat_path, {"cube": cube})
 
-    result = OreMapper().predict_file(
+    result = SpectralMatcher().predict_file(
         mat_path,
-        MapperOptions(
+        MatchOptions(
             wavelengths=[400.0, 500.0, 600.0],
             sensor="manual",
-            minerals=["hematite_demo", "goethite_demo"],
+            classes=["hematite_demo", "goethite_demo"],
             min_confidence=0.0,
             sam_threshold_deg=180.0,
         ),
@@ -418,10 +418,10 @@ def test_mat_file_qc_raster(tmp_path: Path) -> None:
     mat_path = tmp_path / "test_qc.mat"
     scipy.io.savemat(mat_path, {"data": cube})
 
-    mapper = OreMapper()
+    mapper = SpectralMatcher()
     report = mapper.quality_file(
         mat_path,
-        MapperOptions(
+        MatchOptions(
             wavelengths=[400.0, 500.0, 600.0],
             sensor="manual",
         ),
@@ -434,10 +434,10 @@ def test_mat_file_chw_orientation_shape_5_3_4(tmp_path: Path) -> None:
     cube = np.ones((5, 3, 4), dtype=np.float32) * 0.5
     mat_path = tmp_path / "chw_5_3_4.mat"
     scipy.io.savemat(mat_path, {"cube": cube})
-    mapper = OreMapper()
+    mapper = SpectralMatcher()
     report = mapper.quality_file(
         mat_path,
-        MapperOptions(
+        MatchOptions(
             wavelengths=[400.0, 460.0, 520.0, 580.0, 640.0],
             sensor="manual",
         ),
@@ -450,10 +450,10 @@ def test_mat_file_chw_orientation_salinas_like(tmp_path: Path) -> None:
     cube = np.ones((224, 86, 83), dtype=np.float32) * 0.5
     mat_path = tmp_path / "salinas_like.mat"
     scipy.io.savemat(mat_path, {"salinasA_corrected": cube})
-    mapper = OreMapper()
+    mapper = SpectralMatcher()
     report = mapper.quality_file(
         mat_path,
-        MapperOptions(
+        MatchOptions(
             wavelengths=[400.0 + i * 5.0 for i in range(224)],
             sensor="manual",
         ),
@@ -466,10 +466,10 @@ def test_mat_file_chw_orientation_shape_30_100_20(tmp_path: Path) -> None:
     cube = np.ones((30, 100, 20), dtype=np.float32) * 0.5
     mat_path = tmp_path / "chw_30_100_20.mat"
     scipy.io.savemat(mat_path, {"cube": cube})
-    mapper = OreMapper()
+    mapper = SpectralMatcher()
     report = mapper.quality_file(
         mat_path,
-        MapperOptions(
+        MatchOptions(
             wavelengths=list(range(30)),
             sensor="manual",
         ),
@@ -483,10 +483,10 @@ def test_mat_file_int16_qc(tmp_path: Path) -> None:
     cube = rng.integers(0, 10000, size=(4, 4, 3), dtype=np.int16)
     mat_path = tmp_path / "int16_qc.mat"
     scipy.io.savemat(mat_path, {"cube": cube})
-    mapper = OreMapper()
+    mapper = SpectralMatcher()
     report = mapper.quality_file(
         mat_path,
-        MapperOptions(
+        MatchOptions(
             wavelengths=[400.0, 500.0, 600.0],
             sensor="manual",
         ),
@@ -500,16 +500,16 @@ def test_real_mineral_names_raise_error_when_relab_fails(tmp_path: Path) -> None
     path = tmp_path / "real_minerals.tif"
     tifffile.imwrite(path, cube, photometric="minisblack")
 
-    with patch("open_ore_mapper.relab_fetcher.build_spectral_library") as mock_build:
+    with patch("spectral_matching.relab_fetcher.build_spectral_library") as mock_build:
         mock_build.side_effect = RuntimeError("RELAB unavailable")
 
         with pytest.raises(ValueError, match="Authoritative spectra unavailable"):
-            OreMapper().predict_file(
+            SpectralMatcher().predict_file(
                 path,
-                MapperOptions(
+                MatchOptions(
                     wavelengths=[400.0, 500.0, 600.0],
                     sensor="manual",
-                    minerals=["hematite", "goethite"],
+                    classes=["hematite", "goethite"],
                     min_confidence=0.0,
                     sam_threshold_deg=180.0,
                 ),
@@ -521,23 +521,23 @@ def test_demo_minerals_still_work_after_relab_failure(tmp_path: Path) -> None:
     path = tmp_path / "demo_minerals.tif"
     tifffile.imwrite(path, cube, photometric="minisblack")
 
-    with patch("open_ore_mapper.relab_fetcher.build_spectral_library") as mock_build:
+    with patch("spectral_matching.relab_fetcher.build_spectral_library") as mock_build:
         mock_build.side_effect = RuntimeError("RELAB unavailable")
 
-        result = OreMapper().predict_file(
+        result = SpectralMatcher().predict_file(
             path,
-            MapperOptions(
+            MatchOptions(
                 wavelengths=[400.0, 500.0, 600.0],
                 sensor="manual",
-                minerals=["hematite_demo", "goethite_demo"],
+                classes=["hematite_demo", "goethite_demo"],
                 min_confidence=0.0,
                 sam_threshold_deg=180.0,
             ),
         )
 
     assert result.status == "success"
-    assert "hematite_demo" in result.minerals
-    assert "goethite_demo" in result.minerals
+    assert "hematite_demo" in result.classes
+    assert "goethite_demo" in result.classes
 
 
 def test_user_csv_library_bypasses_relab_fallback(tmp_path: Path) -> None:
@@ -554,12 +554,12 @@ def test_user_csv_library_bypasses_relab_fallback(tmp_path: Path) -> None:
         "goethite,500,0.3\n"
     )
 
-    result = OreMapper().predict_file(
+    result = SpectralMatcher().predict_file(
         path,
-        MapperOptions(
+        MatchOptions(
             wavelengths=[400.0, 500.0],
             sensor="manual",
-            minerals=["hematite", "goethite"],
+            classes=["hematite", "goethite"],
             spectral_library=str(csv_path),
             min_confidence=0.0,
             sam_threshold_deg=180.0,
@@ -567,11 +567,11 @@ def test_user_csv_library_bypasses_relab_fallback(tmp_path: Path) -> None:
     )
 
     assert result.status == "success"
-    assert result.minerals == ["hematite", "goethite"]
+    assert result.classes == ["hematite", "goethite"]
 
 
 def test_mtmf_default_is_false() -> None:
-    opts = MapperOptions()
+    opts = MatchOptions()
     assert opts.use_mtmf is False
 
 
@@ -580,12 +580,12 @@ def test_use_mtmf_true_runs_mtmf_path(tmp_path: Path) -> None:
     path = tmp_path / "mtmf_flag.tif"
     tifffile.imwrite(path, cube, photometric="minisblack")
 
-    result = OreMapper().predict_file(
+    result = SpectralMatcher().predict_file(
         path,
-        MapperOptions(
+        MatchOptions(
             wavelengths=[400.0, 500.0, 600.0],
             sensor="manual",
-            minerals=["hematite_demo", "goethite_demo"],
+            classes=["hematite_demo", "goethite_demo"],
             use_mtmf=True,
             mf_threshold=0.0,
             infeas_threshold=1e6,

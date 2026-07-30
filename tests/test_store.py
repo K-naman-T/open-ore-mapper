@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from open_ore_mapper import store
+from spectral_matching import store
 
 
 def test_create_job_returns_job_id(tmp_path: Path) -> None:
@@ -42,12 +42,12 @@ def test_fetch_job_not_found_returns_none(tmp_path: Path) -> None:
 def test_store_result_and_retrieve(tmp_path: Path) -> None:
     db = tmp_path / "test.db"
     conn = store.init_db(db)
-    result = {"status": "success", "minerals": ["A", "B"]}
+    result = {"status": "success", "classes": ["A", "B"]}
     store.store_result(conn, "map-123", result)
     fetched = store.fetch_map(conn, "map-123")
     assert fetched is not None
     assert fetched["result"]["status"] == "success"
-    assert fetched["result"]["minerals"] == ["A", "B"]
+    assert fetched["result"]["classes"] == ["A", "B"]
 
 
 def test_list_user_maps(tmp_path: Path) -> None:

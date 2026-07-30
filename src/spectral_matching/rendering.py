@@ -8,7 +8,7 @@ import numpy as np
 from numpy.typing import NDArray
 from PIL import Image
 
-from .schemas import MineralStatistics
+from .schemas import ClassStatistics
 
 
 CLASS_COLORS = np.array(
@@ -37,10 +37,10 @@ def _png_data_url(rgb: NDArray[np.uint8]) -> str:
     return "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode("utf-8")
 
 
-def class_map_png_data_url(class_map: NDArray[np.integer[Any]], minerals: list[str]) -> str:
+def class_map_png_data_url(class_map: NDArray[np.integer[Any]], classes: list[str]) -> str:
     rgb = np.zeros((*class_map.shape, 3), dtype=np.uint8)
     rgb[:] = UNKNOWN_COLOR
-    for idx, _name in enumerate(minerals):
+    for idx, _name in enumerate(classes):
         rgb[class_map == idx] = CLASS_COLORS[idx % len(CLASS_COLORS)]
     return _png_data_url(cast(NDArray[np.uint8], rgb))
 
@@ -52,21 +52,21 @@ def confidence_png_data_url(confidence: NDArray[np.floating[Any]]) -> str:
     return _png_data_url(cast(NDArray[np.uint8], rgb))
 
 
-def mineral_statistics(
+def class_statistics(
     class_map: NDArray[np.integer[Any]],
     confidence: NDArray[np.floating[Any]],
     abundances: NDArray[np.floating[Any]],
-    minerals: list[str],
-) -> dict[str, MineralStatistics]:
+    classes: list[str],
+) -> dict[str, ClassStatistics]:
     total = int(class_map.size)
-    stats: dict[str, MineralStatistics] = {}
-    for idx, name in enumerate(minerals):
+    stats: dict[str, ClassStatistics] = {}
+    for idx, name in enumerate(classes):
         mask = class_map == idx
         count = int(mask.sum())
         if count == 0:
-            stats[name] = MineralStatistics(0, 0.0, 0.0, 0.0)
+            stats[name] = ClassStatistics(0, 0.0, 0.0, 0.0)
         else:
-            stats[name] = MineralStatistics(
+            stats[name] = ClassStatistics(
                 count=count,
                 percentage=100.0 * count / total,
                 mean_confidence=float(confidence[mask].mean()),

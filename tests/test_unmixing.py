@@ -1,6 +1,6 @@
 import numpy as np
 
-from open_ore_mapper.unmixing import estimate_nnls_abundances
+from spectral_matching.unmixing import estimate_nnls_abundances
 
 
 def test_pure_reference_maps_to_single_high_abundance() -> None:

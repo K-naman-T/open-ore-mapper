@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 from numpy.typing import NDArray
 
-from open_ore_mapper.continuum_removal import (
+from spectral_matching.continuum_removal import (
     AbsorptionFeature,
     FeatureLibrary,
     extract_absorption_features,
@@ -16,7 +16,7 @@ from open_ore_mapper.continuum_removal import (
     match_features,
     match_features_batch,
 )
-from open_ore_mapper.spectral_library import SpectralLibrary
+from spectral_matching.library import SpectralLibrary
 
 
 def test_hull_quotient_on_flat_spectrum_returns_ones() -> None:

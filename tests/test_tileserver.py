@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from open_ore_mapper import tileserver
+from spectral_matching import tileserver
 
 
 # ---------------------------------------------------------------------------
@@ -173,10 +173,10 @@ class TestGetTileMetadataValidation:
 
 
 def test_tile_api_traversal_returns_404(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    import open_ore_mapper.tileserver as ts
+    import spectral_matching.tileserver as ts
 
     monkeypatch.setattr(ts, "TILES_DIR", tmp_path)
-    from open_ore_mapper.api import app
+    from spectral_matching.api import app
     from fastapi.testclient import TestClient
 
     client = TestClient(app)
@@ -187,10 +187,10 @@ def test_tile_api_traversal_returns_404(tmp_path: Path, monkeypatch: pytest.Monk
 
 
 def test_tile_api_negative_z_returns_422(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    import open_ore_mapper.tileserver as ts
+    import spectral_matching.tileserver as ts
 
     monkeypatch.setattr(ts, "TILES_DIR", tmp_path)
-    from open_ore_mapper.api import app
+    from spectral_matching.api import app
     from fastapi.testclient import TestClient
 
     client = TestClient(app)
@@ -199,10 +199,10 @@ def test_tile_api_negative_z_returns_422(tmp_path: Path, monkeypatch: pytest.Mon
 
 
 def test_tile_api_empty_map_uuid_returns_404(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    import open_ore_mapper.tileserver as ts
+    import spectral_matching.tileserver as ts
 
     monkeypatch.setattr(ts, "TILES_DIR", tmp_path)
-    from open_ore_mapper.api import app
+    from spectral_matching.api import app
     from fastapi.testclient import TestClient
 
     client = TestClient(app)
@@ -211,10 +211,10 @@ def test_tile_api_empty_map_uuid_returns_404(tmp_path: Path, monkeypatch: pytest
 
 
 def test_tile_api_valid_tile_returns_200(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    import open_ore_mapper.tileserver as ts
+    import spectral_matching.tileserver as ts
 
     monkeypatch.setattr(ts, "TILES_DIR", tmp_path)
-    from open_ore_mapper.api import app
+    from spectral_matching.api import app
     from fastapi.testclient import TestClient
 
     p = tmp_path / "valid-id" / "0" / "0" / "0.png"

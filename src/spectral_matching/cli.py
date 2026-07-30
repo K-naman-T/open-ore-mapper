@@ -6,8 +6,8 @@ import sys
 from pathlib import Path
 from typing import Sequence
 
-from .schemas import MapperOptions
-from .service import OreMapper
+from .schemas import MatchOptions
+from .engine import SpectralMatcher
 from .wavelengths import parse_wavelengths_text
 
 
@@ -23,7 +23,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="open-ore-mapper",
+        prog="spectral-match",
         description="Map exposed surface mineral signatures from hyperspectral raster cubes.",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -33,7 +33,7 @@ def _build_parser() -> argparse.ArgumentParser:
     predict.add_argument("--sensor", default="cubert_ultris_s5", help="Sensor preset name")
     predict.add_argument("--wavelengths", help="Path to a JSON array of wavelengths")
     predict.add_argument("--library", help="Path to a user spectral library CSV")
-    predict.add_argument("--minerals", required=True, help="Comma-separated mineral names")
+    predict.add_argument("--classes", "--minerals", required=True, dest="classes", help="Comma-separated class names")
     predict.add_argument("--output-dir", required=True, help="Directory for result outputs")
     predict.add_argument("--sam-threshold-deg", type=float, default=12.0)
     predict.add_argument("--min-confidence", type=float, default=0.65)
@@ -91,16 +91,16 @@ def _run_predict(args: argparse.Namespace) -> int:
     if args.wavelengths:
         wavelengths = parse_wavelengths_text(Path(args.wavelengths).read_text(encoding="utf-8"))
 
-    minerals = [name.strip() for name in args.minerals.split(",") if name.strip()]
+    classes = [name.strip() for name in args.classes.split(",") if name.strip()]
 
     excluded = []
     if args.exclude_bands:
         excluded = [int(i.strip()) for i in args.exclude_bands.split(",") if i.strip()]
 
-    options = MapperOptions(
+    options = MatchOptions(
         wavelengths=wavelengths,
         sensor=str(args.sensor),
-        minerals=list(minerals),
+        classes=list(classes),
         spectral_library=args.library,
         sam_threshold_deg=float(args.sam_threshold_deg),
         min_confidence=float(args.min_confidence),
@@ -113,7 +113,7 @@ def _run_predict(args: argparse.Namespace) -> int:
         infeas_threshold=float(getattr(args, "infeas_threshold", 10.0)),
         n_mnf_components=int(getattr(args, "n_mnf_components", 20)),
     )
-    mapper = OreMapper()
+    mapper = SpectralMatcher()
     result = mapper.predict_file(args.input, options)
     response = mapper.to_response(result)
 
@@ -131,13 +131,13 @@ def _run_qc_raster(args: argparse.Namespace) -> int:
     if args.exclude_bands:
         excluded = [int(i.strip()) for i in args.exclude_bands.split(",") if i.strip()]
 
-    options = MapperOptions(
+    options = MatchOptions(
         wavelengths=wavelengths,
         sensor=str(args.sensor),
         excluded_band_indices=excluded,
         min_band_valid_fraction=float(args.min_band_valid_fraction),
     )
-    mapper = OreMapper()
+    mapper = SpectralMatcher()
     report = mapper.quality_file(args.input, options)
     response = mapper.to_quality_response(report)
 

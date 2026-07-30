@@ -1,6 +1,6 @@
 import pytest
 
-from open_ore_mapper.tiling import iter_tiles
+from spectral_matching.tiling import iter_tiles
 
 
 def test_iter_tiles_covers_full_raster() -> None:

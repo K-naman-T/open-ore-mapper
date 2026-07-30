@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from open_ore_mapper.mnf import apply_mnf, mnf_data_mean, mnf_transform
+from spectral_matching.mnf import apply_mnf, mnf_data_mean, mnf_transform
 
 
 def _synthetic_signal_noise_cube(

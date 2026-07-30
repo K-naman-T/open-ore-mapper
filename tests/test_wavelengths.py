@@ -1,13 +1,13 @@
 import pytest
 
-from open_ore_mapper.schemas import MapperOptions
-from open_ore_mapper.wavelengths import parse_wavelengths_text, resolve_wavelengths, validate_wavelengths
+from spectral_matching.schemas import MatchOptions
+from spectral_matching.wavelengths import parse_wavelengths_text, resolve_wavelengths, validate_wavelengths
 
 
 def test_default_options_are_public_demo_defaults() -> None:
-    options = MapperOptions()
+    options = MatchOptions()
     assert options.sensor == "cubert_ultris_s5"
-    assert len(options.minerals) >= 6  # minimum viable, could be DEFAULT_REAL_MINERALS
+    assert len(options.classes) >= 6  # minimum viable, could be DEFAULT_REAL_MINERALS
 
 
 def test_parse_manual_wavelengths_json() -> None:

@@ -1,6 +1,6 @@
 import numpy as np
 
-from open_ore_mapper.rendering import class_map_png_data_url, confidence_png_data_url, mineral_statistics
+from spectral_matching.rendering import class_map_png_data_url, confidence_png_data_url, class_statistics
 
 
 def test_class_map_png_data_url_is_returned() -> None:
@@ -21,7 +21,7 @@ def test_statistics_include_count_percentage_confidence_and_abundance() -> None:
     abundances = np.zeros((2, 2, 2), dtype=np.float32)
     abundances[:, :, 0] = 0.6
     abundances[:, :, 1] = 0.4
-    stats = mineral_statistics(class_map, confidence, abundances, ["A", "B"])
+    stats = class_statistics(class_map, confidence, abundances, ["A", "B"])
     assert stats["A"].count == 2
     assert stats["A"].percentage == 50.0
     assert stats["A"].mean_confidence > 0.8

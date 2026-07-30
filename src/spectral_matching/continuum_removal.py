@@ -8,7 +8,7 @@ import numpy as np
 from numpy.typing import NDArray
 from scipy.spatial import ConvexHull, QhullError
 
-from .spectral_library import SpectralLibrary
+from .library import SpectralLibrary
 
 
 @dataclass(frozen=True)

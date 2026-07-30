@@ -3,7 +3,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from open_ore_mapper.spectral_library import load_csv_library, load_demo_library, resample_library
+from spectral_matching.library import load_csv_library, load_demo_library, resample_library
 
 
 def test_load_csv_library_returns_arrays() -> None:

@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from open_ore_mapper.preprocessing import ensure_hwc, normalize_cube, valid_pixel_mask
+from spectral_matching.preprocessing import ensure_hwc, normalize_cube, valid_pixel_mask
 
 
 def test_l2_normalization_makes_valid_spectra_unit_norm() -> None:
