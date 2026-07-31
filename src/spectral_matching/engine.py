@@ -401,7 +401,9 @@ class SpectralMatcher:
     ) -> tuple[NDArray[np.float32], list[float] | None, list[int] | None]:
         lower = filename.lower()
         if lower.endswith((".tif", ".tiff")):
-            return ensure_hwc(tifffile.imread(io.BytesIO(file_bytes))), None, None
+            return ensure_hwc(
+                tifffile.imread(io.BytesIO(file_bytes)), band_count=band_count_hint
+            ), None, None
         if lower.endswith(".mat"):
             import scipy.io
 
