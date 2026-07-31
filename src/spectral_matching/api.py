@@ -1,6 +1,5 @@
 import json
 import logging
-import tempfile
 import uuid
 from dataclasses import replace
 from pathlib import Path
@@ -9,7 +8,7 @@ from typing import Any
 from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.responses import JSONResponse
 
-from .library import load_csv_bytes
+from .library import load_csv_bytes, load_csv_library
 from .schemas import MatchOptions
 from .engine import SpectralMatcher
 
@@ -18,6 +17,15 @@ logger = logging.getLogger(__name__)
 
 _MAX_UPLOAD_BYTES = 100 * 1024 * 1024
 _CHUNK_SIZE = 64 * 1024
+
+_STARTER_LIBRARY_MAP: dict[str, str] = {
+    "usgs_minerals": "usgs_minerals.csv",
+    "ecostress_veg": "ecostress_veg.csv",
+    "urban_materials": "urban_materials.csv",
+    "usgs_minerals_real": "real/usgs_minerals.csv",
+    "ecostress_veg_real": "real/ecostress_veg.csv",
+    "relab_minerals": "real/relab_minerals.csv",
+}
 
 
 app = FastAPI(title="Spectral", version="0.1.0")
@@ -86,16 +94,20 @@ async def match(
     try:
         mapper_options = _parse_options(options)
 
+        if not mapper_options.classes and mapper_options.spectral_library is not None:
+            lib_obj = load_csv_library(mapper_options.spectral_library, None)
+            mapper_options = replace(mapper_options, classes=lib_obj.names)
+
         if library is not None and library.filename:
             lib_bytes = await _read_upload(library)
             if lib_bytes:
                 lib_obj = load_csv_bytes(lib_bytes)
-                mapper_options = replace(mapper_options, classes=lib_obj.names)
-                suffix = Path(library.filename).suffix or ".csv"
-                tmp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
-                tmp.write(lib_bytes)
-                tmp.close()
-                mapper_options = replace(mapper_options, spectral_library=tmp.name)
+                mapper_options = replace(
+                    mapper_options,
+                    classes=lib_obj.names,
+                    spectral_library=None,
+                    spectral_library_bytes=lib_bytes,
+                )
 
         mapper = SpectralMatcher()
         result = mapper.predict_bytes(
@@ -118,10 +130,10 @@ def _parse_options(options_text: str) -> MatchOptions:
 
     wavelengths = _optional_float_list(raw.get("wavelengths"), "wavelengths")
     classes = _string_list(raw.get("classes", []), "classes")
+
+    spectral_library: str | None = None
     if raw.get("spectral_library") is not None:
-        raise ValueError(
-            "API spectral_library paths are not supported; use the CLI --library option or a future multipart library upload"
-        )
+        spectral_library = _resolve_spectral_library(str(raw["spectral_library"]))
 
     excluded: list[int] = []
     if "excluded_band_indices" in raw:
@@ -137,7 +149,7 @@ def _parse_options(options_text: str) -> MatchOptions:
         wavelengths=wavelengths,
         sensor=str(raw.get("sensor", "aviris")),
         classes=classes if classes else [],
-        spectral_library=None,
+        spectral_library=spectral_library,
         sam_threshold_deg=float(raw.get("sam_threshold_deg", 12.0)),
         min_confidence=float(raw.get("min_confidence", 0.65)),
         tile_size=int(raw.get("tile_size", 128)),
@@ -150,6 +162,38 @@ def _parse_options(options_text: str) -> MatchOptions:
         infeas_threshold=float(raw.get("infeas_threshold", 10.0)),
         n_mnf_components=int(raw.get("n_mnf_components", 20)),
     )
+
+
+def _resolve_starter_library(name: str) -> str | None:
+    """Map a starter library name to its CSV path, or None if unknown."""
+    relative = _STARTER_LIBRARY_MAP.get(name.strip())
+    if relative is None:
+        return None
+    return str(Path(__file__).resolve().parents[2] / "data" / "starter_libraries" / relative)
+
+
+def _resolve_spectral_library(value: str) -> str:
+    """Resolve a spectral_library option to a loadable path.
+
+    Bare names (no path separators, no .csv suffix) are matched against the
+    bundled starter libraries; anything with a .csv suffix is treated as a
+    relative path.
+    """
+    value = value.strip()
+    if not value:
+        return value
+    looks_like_starter_name = (
+        "/" not in value and "\\" not in value and not value.endswith(".csv")
+    )
+    if looks_like_starter_name:
+        resolved = _resolve_starter_library(value)
+        if resolved is None:
+            known = ", ".join(sorted(_STARTER_LIBRARY_MAP))
+            raise ValueError(
+                f"Unknown spectral library '{value}'. Known starter libraries: {known}"
+            )
+        return resolved
+    return value
 
 
 def _string_list(value: Any, field_name: str) -> list[str]:
