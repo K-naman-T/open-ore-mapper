@@ -113,20 +113,12 @@ class SpectralMatcher:
 
         top_abundance = np.max(abundance_cube, axis=2)
         all_warnings = report.warnings
-        effective = self._effective_classifier(
-            selected_options.classifier, use_mtmf=selected_options.use_mtmf
-        )
-        requested = (selected_options.classifier or "sam").strip().lower().replace(" ", "_")
-        if selected_options.use_mtmf and requested not in ("mtmf", "mnf_mtmf"):
-            all_warnings.append("use_mtmf=True selected MTMF path")
-        if effective != requested and not (
-            selected_options.use_mtmf and effective == "mtmf"
-        ):
-            if requested not in _IMPLEMENTED_CLASSIFIERS:
-                all_warnings.append(
-                    f"classifier={selected_options.classifier!r} is not implemented; "
-                    f"ran {effective!r} instead"
-                )
+
+        resolved = (selected_options.classifier or "auto").strip().lower().replace(" ", "_")
+        if resolved == "auto":
+            resolved = self._auto_classifier(len(library.names), len(retained_wls))
+        effective = self._effective_classifier(resolved, use_mtmf=selected_options.use_mtmf)
+
         model_tag = self._model_tag(effective)
         return MatchResult(
             status="success",
