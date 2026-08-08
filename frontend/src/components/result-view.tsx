@@ -12,7 +12,10 @@ export function ResultView({ result }: ResultViewProps) {
   return (
     <main className="flex min-h-0 flex-1 gap-4 overflow-hidden p-3 pt-1">
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/60 bg-card p-3">
-        <Tabs defaultValue="classified" className="flex h-full min-h-0 flex-col gap-2">
+        <Tabs
+          defaultValue={hasConfidence ? "confidence" : "classified"}
+          className="flex h-full min-h-0 flex-col gap-2"
+        >
           <TabsList className="flex-shrink-0 self-start">
             <TabsTrigger value="classified">Classified Map</TabsTrigger>
             {hasConfidence && <TabsTrigger value="confidence">Confidence</TabsTrigger>}
@@ -35,6 +38,7 @@ export function ResultView({ result }: ResultViewProps) {
               <img
                 src={result.confidence_image}
                 alt="Confidence map"
+                title="Per-pixel confidence of the assigned class"
                 className="max-h-full max-w-full rounded-lg object-contain"
               />
             </TabsContent>

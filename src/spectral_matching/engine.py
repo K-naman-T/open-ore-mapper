@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import io
+import logging
+import tempfile
 from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any, cast
@@ -9,6 +11,7 @@ import numpy as np
 from numpy.typing import NDArray
 import tifffile
 
+from .export import export_geotiff
 from .preprocessing import ensure_hwc, normalize_cube, select_bands, valid_pixel_mask
 from .qc import RasterQualityReport, analyze_raster_quality
 from .rendering import class_map_png_data_url, confidence_png_data_url, class_statistics
@@ -23,7 +26,23 @@ from .unmixing import estimate_nnls_abundances
 from .wavelengths import resolve_wavelengths, validate_wavelengths
 
 
+logger = logging.getLogger(__name__)
+
 UNKNOWN_CLASS = 255
+
+# Defense-in-depth ceiling on loaded cube size (elements = H*W*B). ~200M
+# elements is ~800MB of float32, well past any legitimate tile and enough to
+# trip most OOM guards before this one is reached.
+_MAX_CUBE_PIXELS = 200_000_000
+
+
+def _guard_cube_size(cube: np.ndarray) -> None:
+    """Reject absurdly large cubes before downstream processing OOMs."""
+    if cube.size > _MAX_CUBE_PIXELS:
+        raise ValueError(
+            f"Cube too large: shape {cube.shape} has {cube.size:,} elements "
+            f"(max {_MAX_CUBE_PIXELS:,}). Please crop or downsample the input."
+        )
 
 # Classifiers fully implemented in _classify_core (not remapped to SAM).
 _IMPLEMENTED_CLASSIFIERS = frozenset(
@@ -120,6 +139,19 @@ class SpectralMatcher:
         effective = self._effective_classifier(resolved, use_mtmf=selected_options.use_mtmf)
 
         model_tag = self._model_tag(effective)
+        downloads: dict[str, Any] = {}
+        try:
+            geotiff_path = export_geotiff(
+                tempfile.NamedTemporaryFile(
+                    prefix="spectral_", suffix=".tif", delete=False
+                ).name,
+                class_map,
+                confidence_map,
+                library.names,
+            )
+            downloads = {"geotiff": geotiff_path}
+        except Exception:  # noqa: BLE001 - export is best-effort, never block matching
+            logger.warning("GeoTIFF export failed", exc_info=True)
         return MatchResult(
             status="success",
             model_used=f"library_{model_tag}_v1",
@@ -131,8 +163,7 @@ class SpectralMatcher:
             top_abundance_image=confidence_png_data_url(top_abundance),
             statistics=class_statistics(class_map, confidence_map, abundance_cube, library.names),
             warnings=all_warnings,
-            downloads={},
-
+            downloads=downloads,
         )
 
     @staticmethod
@@ -393,9 +424,11 @@ class SpectralMatcher:
     ) -> tuple[NDArray[np.float32], list[float] | None, list[int] | None]:
         lower = filename.lower()
         if lower.endswith((".tif", ".tiff")):
-            return ensure_hwc(
+            cube = ensure_hwc(
                 tifffile.imread(io.BytesIO(file_bytes)), band_count=band_count_hint
-            ), None, None
+            )
+            _guard_cube_size(cube)
+            return cube, None, None
         if lower.endswith(".mat"):
             import scipy.io
 
@@ -443,7 +476,9 @@ class SpectralMatcher:
                     f"No 3D numeric array found in .mat file (keys: {[k for k in mat.keys() if not k.startswith('__')]})"
                 )
             selected = _pick_cube(candidates)
-            return _mat_ensure_hwc(selected, band_count_hint=band_count_hint), None, None
+            cube = _mat_ensure_hwc(selected, band_count_hint=band_count_hint)
+            _guard_cube_size(cube)
+            return cube, None, None
         if lower.endswith((".h5", ".hdf5", ".nc")):
             import h5py
 
@@ -474,6 +509,7 @@ class SpectralMatcher:
                             h5[key][:],
                             band_count=len(embedded_wavelengths) if embedded_wavelengths else None,
                         )
+                        _guard_cube_size(cube)
                         return cube, embedded_wavelengths, auto_excluded_indices
                 keys = list(h5.keys())
                 if not keys:
@@ -482,6 +518,7 @@ class SpectralMatcher:
                     h5[keys[0]][:],
                     band_count=len(embedded_wavelengths) if embedded_wavelengths else None,
                 )
+                _guard_cube_size(cube)
                 return cube, embedded_wavelengths, auto_excluded_indices
         raise ValueError("Supported inputs are .tif, .tiff, .h5, .hdf5, .nc, and .mat")
 

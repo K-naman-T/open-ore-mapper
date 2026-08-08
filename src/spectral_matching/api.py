@@ -162,7 +162,7 @@ def _parse_options(options_text: str) -> MatchOptions:
         sam_threshold_deg=float(raw.get("sam_threshold_deg", 12.0)),
         min_confidence=float(raw.get("min_confidence", 0.65)),
         tile_size=int(raw.get("tile_size", 128)),
-        normalization=str(raw.get("normalization", "l2")),
+        normalization=str(raw.get("normalization", "none")),
         excluded_band_indices=excluded,
         min_band_valid_fraction=float(raw.get("min_band_valid_fraction", 0.5)),
         classifier=str(raw.get("classifier", "auto")),
@@ -182,27 +182,25 @@ def _resolve_starter_library(name: str) -> str | None:
 
 
 def _resolve_spectral_library(value: str) -> str:
-    """Resolve a spectral_library option to a loadable path.
+    """Resolve a spectral_library option to a bundled starter library path.
 
-    Bare names (no path separators, no .csv suffix) are matched against the
-    bundled starter libraries; anything with a .csv suffix is treated as a
-    relative path.
+    Only bare starter library names are accepted. Any value that looks like a
+    filesystem path (contains '/', '\\\\', '..', or a .csv suffix) is rejected;
+    custom libraries must be supplied via the ``library`` file upload.
     """
     value = value.strip()
-    if not value:
-        return value
-    looks_like_starter_name = (
-        "/" not in value and "\\" not in value and not value.endswith(".csv")
-    )
-    if looks_like_starter_name:
-        resolved = _resolve_starter_library(value)
-        if resolved is None:
-            known = ", ".join(sorted(_STARTER_LIBRARY_MAP))
-            raise ValueError(
-                f"Unknown spectral library '{value}'. Known starter libraries: {known}"
-            )
-        return resolved
-    return value
+    if "/" in value or "\\" in value or ".." in value or value.endswith(".csv"):
+        raise ValueError(
+            "spectral_library must be a starter library name, not a file path; "
+            "custom libraries must be uploaded via the 'library' file field"
+        )
+    resolved = _resolve_starter_library(value)
+    if resolved is None:
+        known = ", ".join(sorted(_STARTER_LIBRARY_MAP))
+        raise ValueError(
+            f"Unknown spectral library '{value}'. Known starter libraries: {known}"
+        )
+    return resolved
 
 
 def _string_list(value: Any, field_name: str) -> list[str]:

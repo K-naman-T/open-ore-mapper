@@ -6,7 +6,6 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Slider } from "@/components/ui/slider"
-import { getStarterLibraries } from "@/lib/api"
 import type { MatchOptions } from "@/types"
 
 const CLASSIFIERS = ["auto", "sam", "fuse_classical", "mtmf", "mnf_sam", "mnf_mtmf"] as const
@@ -19,7 +18,6 @@ interface SettingsProps {
 
 export function Settings({ options, onChange }: SettingsProps) {
   const update = (partial: Partial<MatchOptions>) => onChange({ ...options, ...partial })
-  const starterLibraries = getStarterLibraries()
 
   return (
     <div className="flex flex-col gap-2.5">
@@ -70,26 +68,6 @@ export function Settings({ options, onChange }: SettingsProps) {
             {NORMALIZATIONS.map((n) => (
               <SelectItem key={n} value={n}>
                 {n}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="space-y-1">
-        <label className="text-[11px] font-medium text-muted-foreground">Library</label>
-        <Select
-          value={options.spectral_library || ""}
-          onValueChange={(v: string | null) => update({ spectral_library: v || undefined })}
-        >
-          <SelectTrigger size="sm" className="w-full">
-            <SelectValue placeholder="None" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="">None</SelectItem>
-            {starterLibraries.map((l) => (
-              <SelectItem key={l.value} value={l.value}>
-                {l.label}
               </SelectItem>
             ))}
           </SelectContent>

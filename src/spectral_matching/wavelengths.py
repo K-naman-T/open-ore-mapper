@@ -28,6 +28,36 @@ def validate_wavelengths(wavelengths: list[float], expected_bands: int) -> list[
     return [float(value) for value in wavelengths]
 
 
+_SENSOR_PRESETS: dict[str, tuple[float, float, int, str]] = {
+    # name -> (start, stop, band_count, label)
+    "aviris": (366.0, 2510.0, 204, "aviris"),
+    "cubert_ultris_s5": (450.0, 850.0, 51, "cubert_ultris_s5"),
+    "emit": (381.0, 2493.0, 285, "emit"),
+}
+
+
+def _preset_grid(name: str, expected_bands: int) -> tuple[list[float], str] | None:
+    preset = _SENSOR_PRESETS.get(name)
+    if preset is None:
+        return None
+    start, stop, count, label = preset
+    if count == expected_bands:
+        return np.linspace(start, stop, count).tolist(), label
+    return None
+
+
+def _auto_grid(expected_bands: int) -> tuple[list[float], str] | None:
+    # If the raster band count matches a known sensor grid exactly, reuse it
+    # so browser uploads (which never send wavelengths) just work.
+    if expected_bands == 51:
+        return np.linspace(450.0, 850.0, 51).tolist(), "aviris"
+    if expected_bands == 204:
+        return np.linspace(366.0, 2510.0, 204).tolist(), "aviris"
+    if expected_bands == 285:
+        return np.linspace(381.0, 2493.0, 285).tolist(), "emit"
+    return None
+
+
 def resolve_wavelengths(
     wavelengths_text: str | None,
     sensor: str | None,
@@ -37,12 +67,19 @@ def resolve_wavelengths(
     parsed = parse_wavelengths_text(wavelengths_text)
     if parsed is not None:
         return validate_wavelengths(parsed, expected_bands), "manual"
-    if sensor_name == "cubert_ultris_s5":
-        wavelengths = np.linspace(450.0, 850.0, 51).tolist()
-        return validate_wavelengths(wavelengths, expected_bands), sensor_name
-    if sensor_name == "emit":
-        wavelengths = np.linspace(381.0, 2493.0, 285).tolist()
-        return validate_wavelengths(wavelengths, expected_bands), sensor_name
+
+    if sensor_name != "manual":
+        grid = _preset_grid(sensor_name, expected_bands)
+        if grid is not None:
+            return validate_wavelengths(grid[0], expected_bands), grid[1]
+
+    grid = _auto_grid(expected_bands)
+    if grid is not None:
+        return validate_wavelengths(grid[0], expected_bands), grid[1]
+
+    known = ", ".join(sorted(_SENSOR_PRESETS))
     raise ValueError(
-        "Provide wavelengths as a JSON array, or choose a sensor preset that matches the raster band count"
+        f"No wavelength preset for sensor '{sensor_name}' with {expected_bands} bands. "
+        f"Provide wavelengths as a JSON array, or choose a sensor preset that matches "
+        f"the raster band count ({known})"
     )

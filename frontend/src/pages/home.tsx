@@ -31,7 +31,7 @@ export function HomePage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const canMatch = !!cubeFile && (!!libraryFile || !!options.spectral_library || !!options.classes?.length)
+  const canMatch = !!cubeFile && (!!libraryFile || !!options.spectral_library)
 
   const handleMatch = async () => {
     if (!cubeFile) return

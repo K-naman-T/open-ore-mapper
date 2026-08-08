@@ -33,8 +33,6 @@ build/
 *.tiff
 node_modules/
 .next/
-data/
-outputs/
 frontend/dist/
 frontend/node_modules/
 frontend/test-results/
