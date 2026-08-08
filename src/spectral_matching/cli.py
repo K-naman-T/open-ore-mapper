@@ -8,7 +8,7 @@ from typing import Sequence
 
 from .schemas import MatchOptions
 from .engine import SpectralMatcher
-from .wavelengths import parse_wavelengths_text
+from .wavelengths import list_sensor_presets, parse_wavelengths_text
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -69,6 +69,12 @@ def _build_parser() -> argparse.ArgumentParser:
     qc.add_argument("--min-band-valid-fraction", type=float, default=0.5)
     qc.add_argument("--output", help="Path to write quality report JSON (default: stdout)")
     qc.set_defaults(func=_run_qc_raster)
+
+    sensors = subparsers.add_parser(
+        "sensors", help="List available sensor wavelength presets"
+    )
+    sensors.add_argument("--json", action="store_true", help="Output as JSON")
+    sensors.set_defaults(func=_run_sensors)
     return parser
 
 
@@ -136,6 +142,16 @@ def _run_qc_raster(args: argparse.Namespace) -> int:
         print(f"Wrote quality report to {args.output}")
     else:
         print(output_text)
+    return 0
+
+
+def _run_sensors(args: argparse.Namespace) -> int:
+    presets = list_sensor_presets()
+    if args.json:
+        print(json.dumps(presets, indent=2))
+    else:
+        for p in presets:
+            print(f"{p['name']:<16} {p['bands']:<5} {p['description']}")
     return 0
 
 
