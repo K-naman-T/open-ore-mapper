@@ -45,15 +45,6 @@ def health() -> dict[str, str]:
     return {"status": "healthy"}
 
 
-@app.get("/v1/classes")
-def classes() -> dict[str, list[str]]:
-    return {"classes": [
-        "hematite", "goethite", "jarosite", "kaolinite", "montmorillonite",
-        "illite", "calcite", "dolomite", "muscovite", "chlorite",
-        "epidote", "alunite", "gypsum",
-    ]}
-
-
 async def _read_upload(file: UploadFile) -> bytes:
     chunks: list[bytes] = []
     total = 0
@@ -156,7 +147,7 @@ def _parse_options(options_text: str) -> MatchOptions:
 
     return MatchOptions(
         wavelengths=wavelengths,
-        sensor=str(raw.get("sensor", "aviris")),
+        sensor=str(raw.get("sensor", "cubert_ultris_s5")),
         classes=classes if classes else [],
         spectral_library=spectral_library,
         sam_threshold_deg=float(raw.get("sam_threshold_deg", 12.0)),

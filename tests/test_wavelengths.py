@@ -4,10 +4,10 @@ from spectral_matching.schemas import MatchOptions
 from spectral_matching.wavelengths import parse_wavelengths_text, resolve_wavelengths, validate_wavelengths
 
 
-def test_default_options_are_public_demo_defaults() -> None:
+def test_default_options_are_domain_neutral() -> None:
     options = MatchOptions()
     assert options.sensor == "cubert_ultris_s5"
-    assert len(options.classes) >= 6
+    assert options.classes == []
 
 
 def test_parse_manual_wavelengths_json() -> None:

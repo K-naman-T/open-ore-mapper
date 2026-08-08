@@ -26,7 +26,6 @@ export interface MatchResult {
   statistics: Record<string, ClassStatistics>
   warnings: string[]
   downloads: Record<string, string>
-  quality_report?: object
 }
 
 export type Theme = "light" | "dark" | "system"

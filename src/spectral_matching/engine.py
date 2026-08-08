@@ -17,7 +17,7 @@ from .qc import RasterQualityReport, analyze_raster_quality
 from .rendering import class_map_png_data_url, confidence_png_data_url, class_statistics
 from .sam import angles_to_strength, compute_sam_angles
 from .schemas import MatchOptions, MatchResult
-from .library import SpectralLibrary, load_csv_bytes, load_csv_library, load_demo_library, resample_library
+from .library import SpectralLibrary, load_csv_bytes, load_csv_library, resample_library
 from .tiling import iter_tiles
 from .cr_sam import classify_cube_cr_sam
 from .mnf import apply_mnf, mnf_data_mean, mnf_transform
@@ -655,18 +655,6 @@ class SpectralMatcher:
             return resample_library(library, wavelengths)
         if options.spectral_library is not None:
             library = load_csv_library(options.spectral_library, options.classes)
-            return resample_library(library, wavelengths)
-
-        demo_names = [m for m in options.classes if m.endswith("_demo")]
-        real_names = [m for m in options.classes if not m.endswith("_demo")]
-        if demo_names and real_names:
-            raise ValueError(
-                "Cannot mix demo classes (*_demo) with real class names in one run. "
-                "Use only demo names for plumbing tests, or provide --library / spectral_library "
-                "for real classes."
-            )
-        if demo_names and not real_names:
-            library = load_demo_library(options.classes)
             return resample_library(library, wavelengths)
 
         raise ValueError(

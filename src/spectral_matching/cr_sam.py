@@ -1,9 +1,14 @@
 """Continuum-removed / region-weighted SAM — classical CPU spectral matching.
 
-Addresses full-spectrum SAM failures on SWIR-range spectra by:
+Addresses full-spectrum SAM failures on mixed-range spectra by:
 1. Linear continuum removal (fast, vectorized)
-2. Separate VNIR (Fe-oxides) and SWIR (clays/carbonates/silica) windows
-3. Region-gated argmin so kaolinite is not compared to hematite in full space
+2. Separate VNIR (< 1100 nm) and SWIR (>= 1100 nm) regions
+3. Region-gated argmin so a SWIR-featured class is not compared to a
+   VNIR-featured class in full space
+
+The region a class belongs to is inferred from its own continuum-removed
+reference spectrum: the region holding the bulk of its absorption features.
+No domain-specific class names are assumed, keeping the engine universal.
 """
 
 from __future__ import annotations
@@ -15,25 +20,8 @@ from numpy.typing import NDArray
 
 from .sam import compute_sam_angles
 
-# Mineral groups for hierarchical matching
-FE_OXIDES = frozenset({"hematite", "goethite", "magnetite", "limonite", "ferrihydrite"})
-SWIR_MINERALS = frozenset(
-    {
-        "kaolinite",
-        "alunite",
-        "calcite",
-        "chalcedony",
-        "buddingtonite",
-        "muscovite",
-        "montmorillonite",
-        "illite",
-        "dickite",
-        "dolomite",
-        "gypsum",
-        "chlorite",
-        "epidote",
-    }
-)
+# Boundary between VNIR and SWIR regions (nanometers).
+_VNIR_SWIR_SPLIT_NM = 1100.0
 
 
 def linear_continuum_remove(
@@ -58,9 +46,29 @@ def linear_continuum_remove(
     return cast(NDArray[np.float32], np.clip(cr, 0.0, 2.0).astype(np.float32))
 
 
-def band_mask(wavelengths: NDArray[np.floating[Any]], lo: float, hi: float) -> NDArray[np.bool_]:
+def _region_masks(wavelengths: NDArray[np.floating[Any]]) -> tuple[NDArray[np.bool_], NDArray[np.bool_]]:
     wl = np.asarray(wavelengths, dtype=np.float64)
-    return (wl >= lo) & (wl <= hi)
+    vnir_m = wl < _VNIR_SWIR_SPLIT_NM
+    swir_m = ~vnir_m
+    if not np.any(vnir_m):
+        vnir_m = np.ones(wl.shape[0], dtype=bool)
+    if not np.any(swir_m):
+        swir_m = np.ones(wl.shape[0], dtype=bool)
+    return vnir_m, swir_m
+
+
+def _assign_region(cr_row: NDArray[np.floating[Any]], vnir_m: NDArray[np.bool_], swir_m: NDArray[np.bool_]) -> str:
+    """Pick the region holding most of a reference's absorption features.
+
+    Returns "vnir", "swir", or "full" (for featureless spectra) based on mean
+    absolute deviation from the continuum in each region.
+    """
+    dev = np.abs(np.asarray(cr_row, dtype=np.float64) - 1.0)
+    v_energy = float(dev[vnir_m].mean())
+    s_energy = float(dev[swir_m].mean())
+    if v_energy < 1e-6 and s_energy < 1e-6:
+        return "full"
+    return "swir" if s_energy > v_energy else "vnir"
 
 
 def _l2_normalize(rows: NDArray[np.floating[Any]]) -> NDArray[np.float32]:
@@ -91,21 +99,7 @@ def classify_cr_sam(
     if n == 0:
         return np.zeros(0, dtype=np.uint8), np.zeros(0, dtype=np.float32)
 
-    names_l = [m.lower() for m in class_names]
-    fe_idx = [i for i, m in enumerate(names_l) if m in FE_OXIDES]
-    swir_idx = [i for i, m in enumerate(names_l) if m in SWIR_MINERALS]
-    # ungrouped go to both
-    other = [i for i in range(k) if i not in fe_idx and i not in swir_idx]
-    fe_idx = fe_idx + other
-    swir_idx = swir_idx + other
-
-    vnir_m = band_mask(wl, 450.0, 1100.0)
-    swir_m = band_mask(wl, 2000.0, 2450.0)
-    # fallback if masks empty
-    if not np.any(vnir_m):
-        vnir_m = np.ones(wl.shape[0], dtype=bool)
-    if not np.any(swir_m):
-        swir_m = np.ones(wl.shape[0], dtype=bool)
+    vnir_m, swir_m = _region_masks(wl)
 
     # Continuum remove full spectrum then slice (CR more stable on full before cut)
     pix_cr = linear_continuum_remove(pix)
@@ -124,38 +118,41 @@ def classify_cr_sam(
     ang_vnir = _angles_on_mask(pix_cr, ref_cr, vnir_m)
     ang_swir = _angles_on_mask(pix_cr, ref_cr, swir_m)
 
-    # For each pixel, score each class with region-appropriate angle
+    # Assign each reference class to its dominant region
+    regions = [_assign_region(row, vnir_m, swir_m) for row in ref_cr]
+    vnir_idx = [j for j, r in enumerate(regions) if r == "vnir"]
+    swir_idx = [j for j, r in enumerate(regions) if r == "swir"]
+    full_idx = [j for j, r in enumerate(regions) if r == "full"]
+
+    # For each pixel, score each class with its region-appropriate angle
     scores = np.zeros((n, k), dtype=np.float64)
-    for j, name in enumerate(names_l):
-        if name in FE_OXIDES:
-            scores[:, j] = 1.0 - (ang_vnir[:, j] / 90.0)
-            # small bonus from full CR
-            scores[:, j] = 0.75 * scores[:, j] + 0.25 * (1.0 - ang_full[:, j] / 90.0)
-        elif name in SWIR_MINERALS:
-            scores[:, j] = 1.0 - (ang_swir[:, j] / 90.0)
-            scores[:, j] = 0.8 * scores[:, j] + 0.2 * (1.0 - ang_full[:, j] / 90.0)
+    for j, region in enumerate(regions):
+        if region in ("vnir", "swir"):
+            angle = ang_vnir[:, j] if region == "vnir" else ang_swir[:, j]
+            scores[:, j] = 0.75 * (1.0 - angle / 90.0) + 0.25 * (1.0 - ang_full[:, j] / 90.0)
         else:
             scores[:, j] = 1.0 - (ang_full[:, j] / 90.0)
 
     scores = np.clip(scores, 0.0, 1.0)
 
-    # Hierarchical gate: if best SWIR score clearly beats best Fe, restrict to SWIR classes
-    best_fe = np.max(scores[:, fe_idx], axis=1) if fe_idx else np.zeros(n)
-    best_sw = np.max(scores[:, swir_idx], axis=1) if swir_idx else np.zeros(n)
-    use_swir = best_sw >= best_fe - 0.02
-    use_fe = ~use_swir
+    # Hierarchical gate: if the best SWIR score clearly beats the best VNIR
+    # score, restrict to SWIR classes (and vice versa). Featureless ("full")
+    # classes always compete and are never gated out.
+    gate_vnir = sorted(set(vnir_idx) | set(full_idx))
+    gate_swir = sorted(set(swir_idx) | set(full_idx))
+    best_vnir = np.max(scores[:, gate_vnir], axis=1) if gate_vnir else np.zeros(n)
+    best_swir = np.max(scores[:, gate_swir], axis=1) if gate_swir else np.zeros(n)
+    use_swir = best_swir >= best_vnir - 0.02
+    use_vnir = ~use_swir
 
     final_scores = scores.copy()
-    if swir_idx and fe_idx:
-        mask_sw = np.ones(k, dtype=bool)
-        mask_sw[fe_idx] = False
-        # zero Fe scores when SWIR wins
-        for j in fe_idx:
+    if swir_idx and vnir_idx:
+        for j in vnir_idx:
             if j not in swir_idx:
                 final_scores[use_swir, j] = -1.0
         for j in swir_idx:
-            if j not in fe_idx:
-                final_scores[use_fe, j] = -1.0
+            if j not in vnir_idx:
+                final_scores[use_vnir, j] = -1.0
 
     best_idx = np.argmax(final_scores, axis=1).astype(np.uint8)
     best_conf = np.max(final_scores, axis=1).astype(np.float32)
@@ -164,10 +161,10 @@ def classify_cr_sam(
     best_angles = np.empty(n, dtype=np.float32)
     for i in range(n):
         j = int(best_idx[i])
-        name = names_l[j]
-        if name in FE_OXIDES:
+        region = regions[j]
+        if region == "vnir":
             best_angles[i] = ang_vnir[i, j]
-        elif name in SWIR_MINERALS:
+        elif region == "swir":
             best_angles[i] = ang_swir[i, j]
         else:
             best_angles[i] = ang_full[i, j]

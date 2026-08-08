@@ -20,35 +20,6 @@ class SpectralLibrary:
     is_authoritative: bool = False
 
 
-_DEMO_VALUES: dict[str, list[tuple[float, float]]] = {
-    "hematite_demo": [(450, 0.42), (550, 0.30), (650, 0.34), (750, 0.46), (850, 0.52)],
-    "goethite_demo": [(450, 0.38), (550, 0.44), (650, 0.35), (750, 0.48), (850, 0.55)],
-    "jarosite_demo": [(450, 0.52), (550, 0.48), (650, 0.39), (750, 0.50), (850, 0.57)],
-    "magnetite_demo": [(450, 0.12), (550, 0.13), (650, 0.14), (750, 0.15), (850, 0.16)],
-    "limonite_demo": [(450, 0.36), (550, 0.34), (650, 0.31), (750, 0.43), (850, 0.49)],
-    "ferrihydrite_demo": [(450, 0.32), (550, 0.29), (650, 0.33), (750, 0.41), (850, 0.47)],
-}
-
-
-def load_demo_library(target_classes: list[str]) -> SpectralLibrary:
-    missing = [name for name in target_classes if name not in _DEMO_VALUES]
-    if missing:
-        raise ValueError(f"Unknown classes: {', '.join(missing)}")
-    names = list(target_classes)
-    wavelengths = np.asarray([pair[0] for pair in _DEMO_VALUES[names[0]]], dtype=np.float32)
-    spectra = np.asarray(
-        [[reflectance for _wavelength, reflectance in _DEMO_VALUES[name]] for name in names],
-        dtype=np.float32,
-    )
-    return SpectralLibrary(
-        names=names,
-        wavelengths=cast(NDArray[np.float32], wavelengths),
-        spectra=cast(NDArray[np.float32], spectra),
-        source="synthetic demo spectra bundled for software testing, not authoritative spectra",
-        is_authoritative=False,
-    )
-
-
 def load_csv_library(path: str | Path, target_classes: list[str] | None) -> SpectralLibrary:
     rows_by_name: OrderedDict[str, list[tuple[float, float]]] = OrderedDict()
     with Path(path).open(newline="", encoding="utf-8") as handle:
@@ -75,7 +46,7 @@ def load_csv_library(path: str | Path, target_classes: list[str] | None) -> Spec
     if not rows_by_name:
         raise ValueError("Spectral library CSV is empty")
 
-    selected_names = list(rows_by_name) if target_classes is None else list(target_classes)
+    selected_names = list(rows_by_name) if not target_classes else list(target_classes)
     missing = [name for name in selected_names if name not in rows_by_name]
     if missing:
         raise ValueError(f"Unknown classes: {', '.join(missing)}")
@@ -147,7 +118,7 @@ def load_csv_bytes(data: bytes, target_classes: list[str] | None = None) -> Spec
     if not rows_by_name:
         raise ValueError("Spectral library CSV is empty")
 
-    selected_names = list(rows_by_name) if target_classes is None else list(target_classes)
+    selected_names = list(rows_by_name) if not target_classes else list(target_classes)
     missing = [name for name in selected_names if name not in rows_by_name]
     if missing:
         raise ValueError(f"Unknown classes: {', '.join(missing)}")

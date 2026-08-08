@@ -48,15 +48,3 @@ export async function uploadAndMatch(
   }
   return res.json()
 }
-
-export async function getClasses(): Promise<string[]> {
-  const res = await fetch(`${API_BASE}/v1/classes`)
-  if (!res.ok) throw new Error(`Failed to fetch classes (${res.status})`)
-  const body = (await res.json()) as { classes?: string[] }
-  return body.classes ?? []
-}
-
-export async function healthCheck(): Promise<void> {
-  const res = await fetch(`${API_BASE}/health`)
-  if (!res.ok) throw new Error(`Health check failed (${res.status})`)
-}

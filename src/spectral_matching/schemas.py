@@ -8,11 +8,7 @@ from typing import Any
 class MatchOptions:
     wavelengths: list[float] | None = None
     sensor: str = "cubert_ultris_s5"
-    classes: list[str] = field(default_factory=lambda: [
-        "hematite", "goethite", "jarosite", "kaolinite", "montmorillonite",
-        "illite", "calcite", "dolomite", "muscovite", "chlorite",
-        "epidote", "alunite", "gypsum",
-    ])
+    classes: list[str] = field(default_factory=list)
     spectral_library: str | None = None
     spectral_library_bytes: bytes | None = field(default=None, compare=False)  # in-memory CSV for API uploads
     sam_threshold_deg: float = 12.0

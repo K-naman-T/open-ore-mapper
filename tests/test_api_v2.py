@@ -28,12 +28,12 @@ def demo_cube_path() -> str:
 def demo_library_csv_bytes() -> bytes:
     rows = [
         "name,wavelength,reflectance",
-        "hematite_demo,450,0.42",
-        "hematite_demo,550,0.30",
-        "hematite_demo,650,0.34",
-        "goethite_demo,450,0.38",
-        "goethite_demo,550,0.44",
-        "goethite_demo,650,0.35",
+        "class_a,450,0.42",
+        "class_a,550,0.30",
+        "class_a,650,0.34",
+        "class_b,450,0.38",
+        "class_b,550,0.44",
+        "class_b,650,0.35",
     ]
     return "\n".join(rows).encode("utf-8")
 
@@ -44,19 +44,9 @@ def test_health() -> None:
     assert resp.json() == {"status": "healthy"}
 
 
-def test_get_classes() -> None:
-    resp = client.get("/v1/classes")
-    assert resp.status_code == 200
-    body = resp.json()
-    assert "classes" in body
-    assert isinstance(body["classes"], list)
-    assert len(body["classes"]) > 0
-    assert "hematite" in body["classes"]
-
-
 def test_match_upload_cube_only(demo_cube_path: str) -> None:
     options = json.dumps({
-        "classes": ["hematite_demo", "goethite_demo", "jarosite_demo"],
+        "spectral_library": "usgs_minerals",
         "wavelengths": [450.0, 550.0, 650.0],
     })
     with open(demo_cube_path, "rb") as f:
@@ -69,7 +59,7 @@ def test_match_upload_cube_only(demo_cube_path: str) -> None:
     body = resp.json()
     assert body["status"] == "success"
     assert "map_uuid" in body
-    assert len(body["classes"]) == 3
+    assert len(body["classes"]) > 0
 
 
 def test_match_upload_cube_and_library(demo_cube_path: str, demo_library_csv_bytes: bytes) -> None:
