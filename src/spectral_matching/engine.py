@@ -67,10 +67,18 @@ def _mat_ensure_hwc(arr: np.ndarray, band_count_hint: int | None = None) -> np.n
     h, w, c = arr.shape
     if h < c and w < c:
         return arr
-    if h > w + c:
-        return np.moveaxis(arr, 0, -1).astype(np.float32, copy=False)
-    if c < h and c < w:
+    # HWC: last axis is bands. The band dimension is almost always the
+    # smallest and a plausible spectral count (<300), while both spatial dims
+    # are clearly larger (more than 2x the band count). E.g. PaviaU (610,340,103).
+    if (
+        c < h
+        and c < w
+        and c < 300
+        and h > 2 * c
+        and w > 2 * c
+    ):
         return arr
+    # Otherwise treat shape[0] as the band axis (CHW), e.g. Salinas (224,86,83).
     return np.moveaxis(arr, 0, -1).astype(np.float32, copy=False)
 
 
