@@ -15,11 +15,26 @@ Default classifier: `fuse_classical` (MTMF + CR-SAM + MNF-SAM ensemble).
 
 ### CLI
 ```bash
-spectral-match examples/salinasA_corrected.mat \
-  --library examples/library.csv \
-  --classes "ClassA,ClassB,ClassC" \
+# Classify a real lab rock sample (NWA480 meteorite, HySpex SWIR) with real USGS minerals
+spectral-match examples/lab_samples/nwa480_2cm_patch.tif \
+  --sensor hyspex_swir \
+  --library data/starter_libraries/real/usgs_minerals.csv \
+  --classes "Olivine (HS420.4B),Augite (WS592_Pyroxene),Hematite (HS45.3)" \
   --output /tmp/result/
 ```
+
+### Demo scenes included
+| Scene | Type | Bands | Sensor |
+|-------|------|-------|--------|
+| `examples/lab_samples/nwa480_2cm_patch.tif` | meteorite rock sample | 288 | HySpex SWIR |
+| `examples/lab_samples/apple_skin_flesh.tif` | apple skin/flesh | 120 | lab VNIR |
+| `examples/classic_scenes/PaviaU.mat` | urban (Pavia U) | 103 | ROSIS |
+| `examples/real_scenes/indian_pines_corrected.mat` | agriculture | 200 | AVIRIS |
+| `examples/real_scenes/salinasA_corrected.mat` | agriculture | 204 | AVIRIS |
+| `examples/real_scenes/cuprite.mat` | mineral site (95MB, local only) | 224 | AVIRIS |
+| `examples/satellite_scenes/M3T20090420T051311_V01_RFL.h5` | moon surface | 256 (embedded) | M3 |
+
+Scenes carrying no embedded wavelengths ship a matching `*_wavelengths.json` (see each `examples/*/README.md` for provenance).
 
 ### API + UI
 ```bash
