@@ -110,14 +110,25 @@ def test_unknown_sensor_auto_resolves_known_grids() -> None:
     assert len(wavelengths) == 285
 
 
-def test_missing_manual_wavelengths_fail_actionably() -> None:
-    with pytest.raises(ValueError, match="Provide wavelengths"):
-        resolve_wavelengths(None, "manual", expected_bands=6)
+def test_missing_manual_wavelengths_falls_back_to_generic() -> None:
+    # 'manual' with no explicit wavelengths and no matching preset falls back
+    # to a generic grid so the cube still processes (browser uploads never
+    # send sensor or wavelengths).
+    wavelengths, sensor = resolve_wavelengths(None, "manual", expected_bands=6)
+    assert sensor == "generic"
+    assert len(wavelengths) == 6
+    assert wavelengths[0] == 400.0
+    assert wavelengths[-1] == 2500.0
 
 
-def test_unknown_sensor_with_unmatched_bands_fails_actionably() -> None:
-    with pytest.raises(ValueError, match="Provide wavelengths"):
-        resolve_wavelengths(None, "unknown_sensor", expected_bands=6)
+def test_unknown_sensor_with_unmatched_bands_falls_back_to_generic() -> None:
+    # An unknown sensor with an unmatched band count now falls back to a
+    # generic grid rather than erroring, so unknown cubes still process.
+    wavelengths, sensor = resolve_wavelengths(None, "unknown_sensor", expected_bands=6)
+    assert sensor == "generic"
+    assert len(wavelengths) == 6
+    assert wavelengths[0] == 400.0
+    assert wavelengths[-1] == 2500.0
 
 
 def test_sensor_preset_band_mismatch_falls_back_to_auto_grid() -> None:
@@ -142,4 +153,20 @@ def test_sensor_registry_exact_grids_are_monotonic() -> None:
         wl = preset.wavelengths()
         assert len(wl) == preset.bands
         assert all(b > a for a, b in zip(wl[:-1], wl[1:]))
+
+
+def test_unknown_band_count_falls_back_to_generic_grid() -> None:
+    # A cube with a band count matching no sensor preset (e.g. 48 or 51 after
+    # the Cubert preset was removed) must resolve to a generic grid, not error.
+    wl, sensor = resolve_wavelengths(None, "aviris", 48)
+    assert sensor == "generic"
+    assert len(wl) == 48
+    assert wl[0] == 400.0
+    assert wl[-1] == 2500.0
+
+    wl, sensor = resolve_wavelengths(None, None, 51)
+    assert sensor == "generic"
+    assert len(wl) == 51
+    assert wl[0] == 400.0
+    assert wl[-1] == 2500.0
 

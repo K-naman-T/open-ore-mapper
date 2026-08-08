@@ -6,6 +6,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Slider } from "@/components/ui/slider"
+import { SENSOR_PRESETS } from "@/lib/api"
 import type { MatchOptions } from "@/types"
 
 const CLASSIFIERS = ["auto", "sam", "fuse_classical", "mtmf", "mnf_sam", "mnf_mtmf"] as const
@@ -21,6 +22,26 @@ export function Settings({ options, onChange }: SettingsProps) {
 
   return (
     <div className="flex flex-col gap-2.5">
+      <div className="space-y-1">
+        <label className="text-[11px] font-medium text-muted-foreground">Sensor</label>
+        <Select
+          value={options.sensor || "auto"}
+          onValueChange={(v: string | null) => update({ sensor: v ?? "auto" })}
+        >
+          <SelectTrigger size="sm" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="auto">Auto-detect</SelectItem>
+            {SENSOR_PRESETS.map((s) => (
+              <SelectItem key={s.value} value={s.value}>
+                {s.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
       <div className="space-y-1">
         <label className="text-[11px] font-medium text-muted-foreground">Classifier</label>
         <Select

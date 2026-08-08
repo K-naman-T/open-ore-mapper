@@ -6,6 +6,7 @@ export interface MatchOptions {
   excluded_band_indices?: number[]
   spectral_library?: string
   tile_size?: number
+  sensor?: string
 }
 
 export interface ClassStatistics {

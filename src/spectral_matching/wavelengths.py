@@ -205,6 +205,17 @@ def _auto_grid(expected_bands: int) -> tuple[list[float], str] | None:
     return None
 
 
+def _generic_grid(expected_bands: int) -> tuple[list[float], str]:
+    """Fallback: synthesize a linear VNIR-SWIR grid when no sensor matches.
+
+    Used when the cube has no wavelength metadata and its band count matches
+    no known sensor preset. 400-2500 nm is the standard VNIR-SWIR
+    hyperspectral range; the grid is approximate and labeled ``generic`` so
+    callers know the bands were not read from real sensor calibration.
+    """
+    return list(np.linspace(400.0, 2500.0, expected_bands)), "generic"
+
+
 def resolve_wavelengths(
     wavelengths_text: str | None,
     sensor: str | None,
@@ -224,12 +235,7 @@ def resolve_wavelengths(
     if grid is not None:
         return validate_wavelengths(grid[0], expected_bands), grid[1]
 
-    known = ", ".join(sorted(SENSOR_PRESETS))
-    raise ValueError(
-        f"No wavelength preset for sensor '{sensor_name}' with {expected_bands} bands. "
-        f"Provide wavelengths as a JSON array, or choose a sensor preset that matches "
-        f"the raster band count ({known})"
-    )
+    return _generic_grid(expected_bands)
 
 
 def list_sensor_presets() -> list[dict[str, object]]:

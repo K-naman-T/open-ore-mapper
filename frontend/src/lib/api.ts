@@ -20,6 +20,22 @@ export function getStarterLibraries(): StarterLibrary[] {
   return STARTER_LIBRARIES
 }
 
+export const SENSOR_PRESETS: { value: string; label: string }[] = [
+  { value: "aviris", label: "AVIRIS (224)" },
+  { value: "aviris_ng", label: "AVIRIS-NG (425)" },
+  { value: "hyspex_vnir", label: "HySpex VNIR-1800 (186)" },
+  { value: "hyspex_swir", label: "HySpex SWIR-384 (288)" },
+  { value: "casi_1500", label: "CASI-1500 (288)" },
+  { value: "aisafenix", label: "AisaFENIX (620)" },
+  { value: "emit", label: "EMIT (285)" },
+  { value: "enmap", label: "EnMAP (244)" },
+  { value: "prisma", label: "PRISMA (239)" },
+  { value: "hyperion", label: "Hyperion (220)" },
+  { value: "hico", label: "HICO (128)" },
+  { value: "desis", label: "DESIS (235)" },
+  { value: "m3", label: "M3 (260)" },
+]
+
 export async function uploadAndMatch(
   cubeFile: File,
   libraryFile: File | null,
@@ -39,6 +55,7 @@ export async function uploadAndMatch(
     payload.excluded_band_indices = options.excluded_band_indices
   if (options.spectral_library) payload.spectral_library = options.spectral_library
   if (options.tile_size !== undefined) payload.tile_size = options.tile_size
+  if (options.sensor && options.sensor !== "auto") payload.sensor = options.sensor
   form.append("options", JSON.stringify(payload))
 
   const res = await fetch(`${API_BASE}/v1/match`, { method: "POST", body: form })
