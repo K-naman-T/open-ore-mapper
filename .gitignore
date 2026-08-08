@@ -48,10 +48,9 @@ outputs/
 *.keras
 *.mat
 
-# TIFF – block large scene data but allow small project-included examples
+# TIFF – block large scene data
 *.tif
 *.tiff
-!examples/*.tif
 !frontend/e2e/fixtures/*.tif
 # Benchmark labels only (never multi-hundred-MB cubes / raw AVIRIS)
 !benchmarks/**/reference.tif
@@ -61,6 +60,19 @@ benchmarks/**/scene.tif
 benchmarks/**/scene.tiff
 # Secrets
 api_keys.md
+
+# Demo scene binaries – fetch from documented URLs in examples/*/README.md
+examples/demo_scene.tif
+examples/real_scenes/*.mat
+examples/classic_scenes/*.mat
+examples/lab_samples/*.tif
+examples/satellite_scenes/*.h5
+
+# Dependency lockfiles (repo uses pip, not uv)
+uv.lock
+
+# Internal infra templates
+infra/
 
 # Allow source fixture databases (but not runtime *.db)
 !examples/*.db
