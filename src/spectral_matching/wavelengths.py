@@ -184,16 +184,6 @@ SENSOR_PRESETS: dict[str, SensorPreset] = {
         stop=3000.0,
         uniform=False,
     ),
-    # ── Compact field / camera systems (niche) ────────────────────────────
-    "cubert_ultris_s5": SensorPreset(
-        name="cubert_ultris_s5",
-        description="Cubert Ultris S5 snapshot camera (51 bands, 450-850 nm)",
-        source="https://cubert-gmbh.com/",
-        bands=51,
-        start=450.0,
-        stop=850.0,
-        uniform=False,
-    ),
 }
 
 

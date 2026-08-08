@@ -11,7 +11,7 @@ from spectral_matching.wavelengths import (
 
 def test_default_options_are_domain_neutral() -> None:
     options = MatchOptions()
-    assert options.sensor == "cubert_ultris_s5"
+    assert options.sensor == "aviris"
     assert options.classes == []
 
 
@@ -31,14 +31,6 @@ def test_reject_non_increasing_wavelengths() -> None:
 def test_reject_band_count_mismatch() -> None:
     with pytest.raises(ValueError, match="Expected 4 wavelengths"):
         validate_wavelengths([400.0, 500.0, 600.0], expected_bands=4)
-
-
-def test_cubert_preset_has_51_bands() -> None:
-    wavelengths, sensor = resolve_wavelengths(None, "cubert_ultris_s5", expected_bands=51)
-    assert sensor == "cubert_ultris_s5"
-    assert len(wavelengths) == 51
-    assert wavelengths[0] == 450.0
-    assert wavelengths[-1] == 850.0
 
 
 def test_aviris_preset_has_224_bands() -> None:
@@ -107,11 +99,11 @@ def test_satellite_presets_band_counts() -> None:
 
 
 def test_unknown_sensor_auto_resolves_known_grids() -> None:
-    wavelengths, sensor = resolve_wavelengths(None, "unknown_sensor", expected_bands=51)
-    assert sensor == "cubert_ultris_s5"
-    assert len(wavelengths) == 51
-    assert wavelengths[0] == 450.0
-    assert wavelengths[-1] == 850.0
+    wavelengths, sensor = resolve_wavelengths(None, "unknown_sensor", expected_bands=224)
+    assert sensor == "aviris"
+    assert len(wavelengths) == 224
+    assert wavelengths[0] == 400.0
+    assert wavelengths[-1] == 2500.0
 
     wavelengths, sensor = resolve_wavelengths(None, "unknown_sensor", expected_bands=285)
     assert sensor == "emit"
@@ -129,9 +121,9 @@ def test_unknown_sensor_with_unmatched_bands_fails_actionably() -> None:
 
 
 def test_sensor_preset_band_mismatch_falls_back_to_auto_grid() -> None:
-    wavelengths, sensor = resolve_wavelengths(None, "emit", expected_bands=51)
-    assert sensor == "cubert_ultris_s5"
-    assert len(wavelengths) == 51
+    wavelengths, sensor = resolve_wavelengths(None, "emit", expected_bands=224)
+    assert sensor == "aviris"
+    assert len(wavelengths) == 224
 
 
 def test_sensor_registry_duplicate_band_counts_are_documented() -> None:

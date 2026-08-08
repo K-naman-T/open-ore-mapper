@@ -147,7 +147,7 @@ def _parse_options(options_text: str) -> MatchOptions:
 
     return MatchOptions(
         wavelengths=wavelengths,
-        sensor=str(raw.get("sensor", "cubert_ultris_s5")),
+        sensor=str(raw.get("sensor", "aviris")),
         classes=classes if classes else [],
         spectral_library=spectral_library,
         sam_threshold_deg=float(raw.get("sam_threshold_deg", 12.0)),

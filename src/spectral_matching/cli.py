@@ -30,7 +30,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     match = subparsers.add_parser("match", help="Run SAM/NNLS classification on a raster cube")
     match.add_argument("input", help="Input .tif, .tiff, .h5, .hdf5, or .mat raster cube")
-    match.add_argument("--sensor", default="cubert_ultris_s5", help="Sensor preset name")
+    match.add_argument("--sensor", default="aviris", help="Sensor preset name")
     match.add_argument("--wavelengths", help="Path to a JSON array of wavelengths")
     match.add_argument("--library", help="Path to a user spectral library CSV")
     match.add_argument("--classes", required=True, help="Comma-separated class names")
@@ -63,7 +63,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     qc = subparsers.add_parser("qc-raster", help="Run raster quality control and band analysis")
     qc.add_argument("input", help="Input .tif, .tiff, .h5, .hdf5, or .mat raster cube")
-    qc.add_argument("--sensor", default="cubert_ultris_s5", help="Sensor preset name")
+    qc.add_argument("--sensor", default="aviris", help="Sensor preset name")
     qc.add_argument("--wavelengths", help="Path to a JSON array of wavelengths")
     qc.add_argument("--exclude-bands", help="Comma-separated zero-based band indices to exclude (e.g. 0,3,10)")
     qc.add_argument("--min-band-valid-fraction", type=float, default=0.5)

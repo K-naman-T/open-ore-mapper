@@ -67,7 +67,6 @@ The engine ships wavelength grids for well-known hyperspectral sensors. Pick a p
 | `hico` | 128 | 352.528–1079.984 | uniform 5.728 nm |
 | `desis` | 235 | 400–1000 | per-product centers |
 | `m3` | 260 | 430–3000 | non-linear |
-| `cubert_ultris_s5` | 51 | 450–850 | snapshot camera |
 
 `spectral-match sensors` lists presets with sources. Exact grids are used where verified (AVIRIS-NG, HySpex, HICO); other sensors use documented ranges. When a scene ships its own wavelength metadata (ENVI `.hdr` `wavelength = {...}`, EMIT NetCDF `sensor_band_parameters/wavelengths`), prefer that over the preset.
 

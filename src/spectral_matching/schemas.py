@@ -7,7 +7,7 @@ from typing import Any
 @dataclass(frozen=True)
 class MatchOptions:
     wavelengths: list[float] | None = None
-    sensor: str = "cubert_ultris_s5"
+    sensor: str = "aviris"
     classes: list[str] = field(default_factory=list)
     spectral_library: str | None = None
     spectral_library_bytes: bytes | None = field(default=None, compare=False)  # in-memory CSV for API uploads

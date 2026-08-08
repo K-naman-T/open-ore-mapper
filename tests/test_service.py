@@ -42,9 +42,9 @@ def _two_class_library(tmp_path: Path) -> Path:
     return csv_path
 
 
-def test_predict_file_on_synthetic_cubert_like_tiff(tmp_path: Path) -> None:
-    cube = np.ones((8, 8, 51), dtype=np.float32) * 0.5
-    cube[:4, :4, 10:20] *= 0.5
+def test_predict_file_on_synthetic_hico_like_tiff(tmp_path: Path) -> None:
+    cube = np.ones((8, 8, 128), dtype=np.float32) * 0.5
+    cube[:4, :4, 30:50] *= 0.5
     path = tmp_path / "synthetic.tif"
     tifffile.imwrite(path, cube, photometric="minisblack")
     lib = _write_library(tmp_path)
@@ -52,10 +52,11 @@ def test_predict_file_on_synthetic_cubert_like_tiff(tmp_path: Path) -> None:
     result = SpectralMatcher().predict_file(
         path,
         MatchOptions(
-            sensor="cubert_ultris_s5",
+            sensor="hico",
             classes=["class_a", "class_b"],
             spectral_library=str(lib),
             tile_size=4,
+            classifier="sam",
             min_confidence=0.0,
             sam_threshold_deg=180.0,
         ),
@@ -68,8 +69,8 @@ def test_predict_file_on_synthetic_cubert_like_tiff(tmp_path: Path) -> None:
     assert "class_a" in result.statistics
 
 
-def test_default_options_use_cubert_wavelength_preset(tmp_path: Path) -> None:
-    cube = np.ones((4, 4, 51), dtype=np.float32) * 0.5
+def test_default_options_use_hico_wavelength_preset(tmp_path: Path) -> None:
+    cube = np.ones((4, 4, 128), dtype=np.float32) * 0.5
     path = tmp_path / "synthetic.tif"
     tifffile.imwrite(path, cube, photometric="minisblack")
     lib = _write_library(tmp_path)
@@ -79,13 +80,14 @@ def test_default_options_use_cubert_wavelength_preset(tmp_path: Path) -> None:
         MatchOptions(
             classes=["class_a"],
             spectral_library=str(lib),
+            classifier="sam",
             min_confidence=0.0,
             sam_threshold_deg=180.0,
         ),
     )
 
-    assert result.sensor == "cubert_ultris_s5"
-    assert len(result.wavelengths) == 51
+    assert result.sensor == "hico"
+    assert len(result.wavelengths) == 128
 
 
 def test_nnls_abundance_uses_raw_spectra_not_l2_normalized_spectra(tmp_path: Path) -> None:
@@ -120,7 +122,7 @@ def test_nnls_abundance_uses_raw_spectra_not_l2_normalized_spectra(tmp_path: Pat
 
 
 def test_hdf5_without_wavelengths_falls_back_to_sensor_preset(tmp_path: Path) -> None:
-    cube = np.zeros((4, 4, 51), dtype=np.float32)
+    cube = np.zeros((4, 4, 128), dtype=np.float32)
     path = tmp_path / "no_wl.h5"
     with h5py.File(path, "w") as h5:
         h5.create_dataset("hdr", data=cube)
@@ -129,15 +131,16 @@ def test_hdf5_without_wavelengths_falls_back_to_sensor_preset(tmp_path: Path) ->
     result = SpectralMatcher().predict_file(
         path,
         MatchOptions(
-            sensor="cubert_ultris_s5",
+            sensor="hico",
             classes=["class_a", "class_b"],
             spectral_library=str(lib),
+            classifier="sam",
             min_confidence=0.0,
             sam_threshold_deg=180.0,
         ),
     )
-    assert result.sensor == "cubert_ultris_s5"
-    assert len(result.wavelengths) == 51
+    assert result.sensor == "hico"
+    assert len(result.wavelengths) == 128
 
 
 def test_hdf5_without_wavelengths_falls_back_to_manual_wavelengths(tmp_path: Path) -> None:
